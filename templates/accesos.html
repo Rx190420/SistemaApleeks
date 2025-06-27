@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Apleeks Solicitud de apertura</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 1rem;
+            z-index: 2000;
+        }
+        .toast-custom {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast-custom.hide {
+            opacity: 0;
+        }
+        .form-check-center {
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Paginación con color verde para activo */
+    .pagination .page-item.active .page-link {
+      background-color: #198754;
+      border-color: #198754;
+      color: white;
+    }
+    .pagination .page-link {
+      color: #198754;
+    }
+    .pagination .page-link:hover {
+      color: #145c32;
+    }
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+        
+        <!-- Botón para móviles -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarUser" aria-controls="navbarUser" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Menú colapsable -->
+        <div class="collapse navbar-collapse" id="navbarUser">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-white bg-success active" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-white bg-success active" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-dark" href="#"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<!-- CONTENIDO PRINCIPAL AQUÍ -->
+<div class="container mb-4">
+  <div class="bg-white rounded shadow-sm p-4 bg-body">
+    <h2 class="fw-bold">Control de Accesos</h2>
+
+    <hr>
+
+    <!-- Botón para abrir modal de nuevo registro -->
+    <div class="mb-3">
+      <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#insertModal">
+        <i class="bi bi-plus-circle"></i> Agregar Selección
+      </button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="row mb-3">
+      <div class="col-md-4 mb-2">
+        <input type="text" id="buscador" class="form-control" placeholder="Buscar por ID, proyecto, entorno o UDP" />
+      </div>
+      <div class="col-md-8 mb-2 d-flex justify-content-end align-items-center">
+        <label for="registrosPorPagina" class="me-2 mb-0 fw-semibold text-muted">Ver por página:</label>
+        <select id="registrosPorPagina" class="form-select form-select-sm w-auto">
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select>
+      </div>
+    </div>
+
+    {% if seleccionados|length == 0 %}
+      <div class="alert alert-secondary text-center fw-bold" role="alert">
+        No hay accesos para mostrar.
+      </div>
+    {% else %}
+      <table class="table table-bordered align-middle">
+        <thead class="table-success">
+          <tr>
+            <th>ID</th>
+            <th>Remoto</th>
+            <th>Proyecto</th>
+            <th>Entorno</th>
+            <th>UDP</th>
+            <th>Seleccionar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sel in seleccionados %}
+          <tr class="fila-tabla">
+            <td>{{ sel.idseleccion }}</td>
+            <td>{{ sel.remoto_name }}</td>
+            <td>{{ sel.proyecto_name }}</td>
+            <td>{{ sel.entorno_name }}</td>
+            <td>{{ sel.udp_name }}</td>
+            <td>
+              <form action="{{ url_for('toggle_seleccion') }}" method="POST" class="d-inline">
+                <input type="hidden" name="id" value="{{ sel.idseleccion }}">
+                <input type="hidden" name="seleccionado" value="{{ 0 if sel.seleccionado else 1 }}">
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="switch-{{ sel.idseleccion }}" onchange="this.form.submit()" {% if sel.seleccionado %}checked{% endif %}>
+                  <label class="form-check-label" for="switch-{{ sel.idseleccion }}"></label>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <!-- Contador de registros -->
+    <div class="text-muted small mt-2" id="contador-registros">
+      Mostrando 0 de 0 registros encontrados
+    </div>
+
+    <!-- Paginación -->
+    <nav aria-label="Paginación de resultados">
+      <ul class="pagination justify-content-center mt-4" id="paginacionLista"></ul>
+    </nav>
+  </div>
+</div>
+
+
+<!-- Modal para insertar nuevo registro -->
+<div class="modal fade" id="insertModal" tabindex="-1" aria-labelledby="insertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <!-- FORMULARIO: usa método POST clásico y apunta a la ruta correcta -->
+    <form class="w-100" action="{{ url_for('insert_seleccion') }}" method="POST">
+      <div class="modal-content border-0 shadow-sm">
+        <div class="modal-header bg-light text-dark border-bottom">
+          <h5 class="modal-title fw-bold" id="insertModalLabel">
+            <i class="bi bi-plus-circle me-2 text-muted"></i> Nueva selección
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body small text-muted">
+          <!-- Campos para seleccionar los datos relacionados -->
+          <div class="mb-3">
+            <label for="remoto" class="form-label text-dark fw-bold">Remoto</label>
+            <select class="form-select form-select-sm" id="remoto" name="remoto" required>
+              <option value="" disabled selected>Selecciona un remoto</option>
+              {% for r in remotos %}
+              <option value="{{ r.remoto_code }}">{{ r.remoto_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="proyecto" class="form-label text-dark fw-bold">Proyecto</label>
+            <select class="form-select form-select-sm" id="proyecto" name="proyecto" required>
+              <option value="" disabled selected>Selecciona un proyecto</option>
+              {% for p in proyectos %}
+              <option value="{{ p.proyecto_code }}">{{ p.proyecto_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="entorno" class="form-label text-dark fw-bold">Entorno</label>
+            <select class="form-select form-select-sm" id="entorno" name="entorno" required>
+              <option value="" disabled selected>Selecciona un entorno</option>
+              {% for e in entornos %}
+              <option value="{{ e.entorno_code }}">{{ e.entorno_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="udp" class="form-label text-dark fw-bold">UDP</label>
+            <select class="form-select form-select-sm" id="udp" name="udp" required>
+              <option value="" disabled selected>Selecciona un puerto UDP</option>
+              {% for u in udps %}
+              <option value="{{ u.udp_code }}">{{ u.udp_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="seleccionado" class="form-label text-dark fw-bold">Activar</label>
+            <select class="form-select form-select-sm" id="seleccionado" name="seleccionado" required>
+              <option value="0">No</option>
+              <option value="1">Sí</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer justify-content-between">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+            <i class="bi bi-x-lg me-1"></i> Cancelar
+          </button>
+          <button type="submit" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-check-circle me-1"></i> Guardar
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+
+
+<script>
+    document.querySelectorAll('.toggle-switch').forEach(switchEl => {
+  switchEl.addEventListener('change', async function () {
+    const id = this.dataset.id;
+    const seleccionado = this.checked ? 1 : 0;
+
+    try {
+      const response = await fetch('/toggle_seleccion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, seleccionado })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.status !== 'success') {
+        alert('Error al guardar el cambio: ' + (result.message || 'Error desconocido'));
+        // Revertir el switch al estado anterior
+        this.checked = !this.checked;
+      }
+    } catch (error) {
+      alert('Error de conexión: ' + error.message);
+      // Revertir el switch al estado anterior
+      this.checked = !this.checked;
+    }
+  });
+});
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const filas = Array.from(document.querySelectorAll(".fila-tabla"));
+  const buscador = document.getElementById("buscador");
+  const registrosPorPaginaSelect = document.getElementById("registrosPorPagina");
+  const paginacionLista = document.getElementById("paginacionLista");
+  const contadorRegistros = document.getElementById("contador-registros");
+
+  let paginaActual = 1;
+  let itemsPorPagina = parseInt(registrosPorPaginaSelect.value);
+
+  function filtrarFilas() {
+    const termino = buscador.value.toLowerCase();
+
+    return filas.filter(fila => {
+      return Array.from(fila.children).some(td =>
+        td.textContent.toLowerCase().includes(termino)
+      );
+    });
+  }
+
+  function mostrarPagina(itemsFiltrados) {
+    const inicio = (paginaActual - 1) * itemsPorPagina;
+    const fin = inicio + itemsPorPagina;
+
+    filas.forEach(f => f.style.display = "none");
+    itemsFiltrados.slice(inicio, fin).forEach(f => f.style.display = "");
+
+    actualizarContador(itemsFiltrados.length);
+  }
+
+  function actualizarContador(totalFiltrados) {
+    if (totalFiltrados === 0) {
+      contadorRegistros.textContent = "No se encontraron registros.";
+    } else {
+      const desde = (paginaActual - 1) * itemsPorPagina + 1;
+      const hasta = Math.min(paginaActual * itemsPorPagina, totalFiltrados);
+      contadorRegistros.textContent = `Mostrando ${desde} a ${hasta} de ${totalFiltrados} registros encontrados`;
+    }
+  }
+
+  function renderizarPaginacion(itemsFiltrados) {
+    const totalPaginas = Math.ceil(itemsFiltrados.length / itemsPorPagina);
+    paginacionLista.innerHTML = "";
+
+    // Botón "Anterior"
+    const liPrev = document.createElement("li");
+    liPrev.className = "page-item" + (paginaActual === 1 ? " disabled" : "");
+    liPrev.innerHTML = `<a class="page-link" href="#">Anterior</a>`;
+    liPrev.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (paginaActual > 1) {
+        paginaActual--;
+        mostrarPagina(itemsFiltrados);
+        renderizarPaginacion(itemsFiltrados);
+      }
+    });
+    paginacionLista.appendChild(liPrev);
+
+    // Botones de número de página
+    for (let i = 1; i <= totalPaginas; i++) {
+      const li = document.createElement("li");
+      li.className = "page-item" + (i === paginaActual ? " active" : "");
+      li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+      li.addEventListener("click", (e) => {
+        e.preventDefault();
+        paginaActual = i;
+        mostrarPagina(itemsFiltrados);
+        renderizarPaginacion(itemsFiltrados);
+      });
+      paginacionLista.appendChild(li);
+    }
+
+    // Botón "Siguiente"
+    const liNext = document.createElement("li");
+    liNext.className = "page-item" + (paginaActual === totalPaginas ? " disabled" : "");
+    liNext.innerHTML = `<a class="page-link" href="#">Siguiente</a>`;
+    liNext.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (paginaActual < totalPaginas) {
+        paginaActual++;
+        mostrarPagina(itemsFiltrados);
+        renderizarPaginacion(itemsFiltrados);
+      }
+    });
+    paginacionLista.appendChild(liNext);
+  }
+
+  function aplicarFiltros() {
+    const filtrados = filtrarFilas();
+    paginaActual = 1;
+    mostrarPagina(filtrados);
+    renderizarPaginacion(filtrados);
+  }
+
+  buscador.addEventListener("input", aplicarFiltros);
+  registrosPorPaginaSelect.addEventListener("change", () => {
+    itemsPorPagina = parseInt(registrosPorPaginaSelect.value);
+    aplicarFiltros();
+  });
+
+  aplicarFiltros(); // Inicial
+});
+</script>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
