@@ -18,6 +18,17 @@
         .pagination .page-link:hover {
           color: #145c32;
         }
+        
+        /* Estilo para el checkbox de selección */
+        .select-checkbox {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .select-all-container {
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -135,10 +146,18 @@
         <h2 class="mb-3 fw-bold">Papelera de Registros</h2>
         <hr>
 
-        <!-- Botón para abrir modal -->
-        <div class="mb-3">
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAgregarUsuario">
-                <i class="bi bi-plus-circle"></i> Agregar Usuario
+        <!-- Botón para eliminar seleccionados -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="select-all-container">
+                <div class="form-check">
+                    <input class="form-check-input select-checkbox" type="checkbox" id="selectAll">
+                    <label class="form-check-label fw-semibold" for="selectAll">
+                        Seleccionar todo
+                    </label>
+                </div>
+            </div>
+            <button id="btnEliminarSeleccionados" class="btn btn-danger" disabled>
+                <i class="bi bi-trash-fill"></i> Eliminar seleccionados
             </button>
         </div>
 
@@ -176,15 +195,18 @@
                      data-codigo="{{ a.apertura_code }}">
                     <h2 class="accordion-header" id="heading{{ loop.index }}">
                         <button class="accordion-button collapsed fw-medium text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
-                            <div class="d-flex flex-column w-100">
-                                <div>
-                                    Apertura #{{ a.apertura_code }} - {{ a.solicitud_usuario }} - {{ a.tipo_opcion|capitalize }} #{{ a.folio }}
-                                    <span class="badge bg-success ms-2">
-                                        <i class="bi bi-check-circle-fill"></i> Finalizado
-                                    </span>
-                                </div>
-                                <div class="text-muted small mt-1">
-                                    Proyecto: {{ a.proyecto_name }} | Entorno: {{ a.entorno_name }}
+                            <div class="d-flex align-items-center w-100">
+                                <input type="checkbox" class="form-check-input select-checkbox select-item" data-id="{{ a.apertura_code }}" data-folio="{{ a.folio }}" style="margin-right: 15px;">
+                                <div class="d-flex flex-column flex-grow-1">
+                                    <div>
+                                        Apertura #{{ a.apertura_code }} - {{ a.solicitud_usuario }} - {{ a.tipo_opcion|capitalize }} #{{ a.folio }}
+                                        <span class="badge bg-success ms-2">
+                                            <i class="bi bi-check-circle-fill"></i> Finalizado
+                                        </span>
+                                    </div>
+                                    <div class="text-muted small mt-1">
+                                        Proyecto: {{ a.proyecto_name }} | Entorno: {{ a.entorno_name }}
+                                    </div>
                                 </div>
                             </div>
                         </button>
@@ -276,19 +298,7 @@
 
                             {% if role == 'admin' %}
                             <hr>
-                            <div class="d-flex justify-content-end gap-2 mt-3">
-                                <form method="post" class="form-papelera">
-                                    <input type="hidden" name="apertura_code" value="{{ a.apertura_code }}">
-                                    <input type="hidden" name="folio" value="{{ a.folio }}">
-                                    <button type="button" class="btn btn-outline-danger btn-sm btn-abrir-modal"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#modalPapelera"
-                                            data-folio="{{ a.folio }}"
-                                            data-apertura="{{ a.apertura_code }}">
-                                        <i class="bi bi-trash"></i> Mover a papelera
-                                    </button>
-                                </form>
-                            </div>
+
                             {% endif %}
                         </div>
                     </div>
@@ -296,7 +306,7 @@
                 {% endfor %}
             {% else %}
                 <div class="alert alert-secondary text-center">
-                    No hay actividades finalizadas.
+                    No hay actividades en la papelera.
                 </div>
             {% endif %}
         </div>
@@ -313,6 +323,25 @@
     </div>
 </div>
 
+<!-- Modal de confirmación para eliminar seleccionados -->
+<div class="modal fade" id="modalEliminarSeleccionados" tabindex="-1" aria-labelledby="modalEliminarSeleccionadosLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarSeleccionadosLabel">Confirmar eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar permanentemente los elementos seleccionados?</p>
+                <p class="fw-bold">Esta acción no se puede deshacer y eliminará los registros tanto de la papelera como de la tabla de solicitudes.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmarEliminarSeleccionados">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -324,9 +353,77 @@ document.addEventListener("DOMContentLoaded", () => {
   const paginacionLista = document.getElementById("paginacionLista");
   const contador = document.getElementById("contador-registros");
   const items = Array.from(document.querySelectorAll(".actividad-item"));
+  const selectAllCheckbox = document.getElementById("selectAll");
+  const selectItemCheckboxes = document.querySelectorAll(".select-item");
+  const btnEliminarSeleccionados = document.getElementById("btnEliminarSeleccionados");
+  const confirmarEliminarSeleccionados = document.getElementById("confirmarEliminarSeleccionados");
 
   let paginaActual = 1;
   let itemsPorPagina = parseInt(registrosPorPagina.value);
+
+  // Función para verificar si hay elementos seleccionados
+  function verificarSeleccion() {
+    const seleccionados = document.querySelectorAll('.select-item:checked');
+    btnEliminarSeleccionados.disabled = seleccionados.length === 0;
+  }
+
+  // Seleccionar/deseleccionar todos los elementos
+  selectAllCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    document.querySelectorAll('.select-item').forEach(checkbox => {
+      checkbox.checked = isChecked;
+    });
+    verificarSeleccion();
+  });
+
+  // Verificar selección cuando se marca un elemento individual
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('select-item')) {
+      // Verificar si todos los elementos visibles están seleccionados
+      const allVisibleCheckboxes = document.querySelectorAll('.actividad-item:not([style*="display: none"]) .select-item');
+      const allChecked = Array.from(allVisibleCheckboxes).every(checkbox => checkbox.checked);
+      
+      selectAllCheckbox.checked = allChecked;
+      verificarSeleccion();
+    }
+  });
+
+  // Mostrar modal de confirmación para eliminar seleccionados
+  btnEliminarSeleccionados.addEventListener('click', function() {
+    const modal = new bootstrap.Modal(document.getElementById('modalEliminarSeleccionados'));
+    modal.show();
+  });
+
+  // Confirmar eliminación de seleccionados
+confirmarEliminarSeleccionados.addEventListener('click', function() {
+    const seleccionados = Array.from(document.querySelectorAll('.select-item:checked')).map(checkbox => {
+        return {
+            apertura_code: checkbox.dataset.id,
+            folio: checkbox.dataset.folio
+        };
+    });
+
+    if (seleccionados.length === 0) return;
+
+    // Enviar datos al servidor para eliminar
+    fetch('/eliminar_seleccionados', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ items: seleccionados })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.redirect) {
+            window.location.href = data.redirect;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        window.location.href = '/papelera'; // Redirigir de todos modos para mostrar mensaje de error
+    });
+});
 
   function aplicarFiltros() {
     const texto = buscador.value.trim().toLowerCase();
@@ -416,6 +513,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const visibles = itemsFiltrados.slice(inicio, fin);
     visibles.forEach((item) => item.style.display = "block");
     contador.textContent = `Mostrando ${visibles.length} de ${itemsFiltrados.length} registros encontrados`;
+    
+    // Actualizar el estado de "Seleccionar todos" cuando cambia la página
+    const allVisibleCheckboxes = document.querySelectorAll('.actividad-item:not([style*="display: none"]) .select-item');
+    const allChecked = allVisibleCheckboxes.length > 0 && Array.from(allVisibleCheckboxes).every(checkbox => checkbox.checked);
+    selectAllCheckbox.checked = allChecked;
   }
 
   function actualizarVista() {

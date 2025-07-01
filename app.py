@@ -36,7 +36,7 @@ app.secret_key = 'tu_clave_secreta'
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '',
+    'password': '12345678',
     'database': 'utpDB'
 }
 
@@ -48,6 +48,10 @@ def uploads(filename):
 def inject_now():
     return {'now': datetime.now}
 
+from flask import jsonify, request, session, flash
+from datetime import datetime
+import re
+
 @app.route('/actualizar_tiempo_apertura', methods=['POST'])
 def actualizar_tiempo_apertura():
     if 'username' not in session:
@@ -55,8 +59,8 @@ def actualizar_tiempo_apertura():
 
     data = request.get_json()
     apertura_code = data.get('apertura_code')
-    # Validar que el tiempo tenga el formato HH:MM:SS
-    tiempo_restante = data.get('tiempo_restante', '')
+    tiempo_restante = data.get('tiempo_restante', '')  # Formato HH:MM:SS
+
     if not re.match(r'^\d{2}:\d{2}:\d{2}$', tiempo_restante):
         return jsonify({"error": "Formato de tiempo no válido"}), 400
 
@@ -64,25 +68,63 @@ def actualizar_tiempo_apertura():
         return jsonify({"error": "Faltan datos"}), 400
 
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     try:
+        # Obtener apertura
+        cursor.execute("""
+            SELECT apertura_tiempo, fecha_apertura, expirada 
+            FROM aperturas_iniciadas 
+            WHERE apertura_code = %s
+        """, (apertura_code,))
+        apertura = cursor.fetchone()
+
+        if not apertura:
+            return jsonify({"error": "Código de apertura no encontrado"}), 404
+
+        if apertura['expirada'] == 1:
+            return jsonify({"expired": True, "message": "El tiempo de apertura ha expirado"}), 200
+
+        # Tiempo límite exacto = fecha_apertura (datetime) + duración (calculada desde apertura_tiempo)
+        fecha_apertura = apertura['fecha_apertura']
+        tiempo_limite_str = apertura['apertura_tiempo']
+        if not tiempo_limite_str:
+            return jsonify({"error": "Tiempo límite no registrado"}), 500
+
+        tiempo_limite_completo = datetime.combine(fecha_apertura.date(), datetime.strptime(tiempo_limite_str, '%H:%M:%S').time())
+        ahora = datetime.now()
+
+        if ahora >= tiempo_limite_completo:
+            # Tiempo vencido: marcar como expirada y registrar hora final
+            final_time = ahora.strftime('%H:%M:%S')
+            cursor.execute("""
+                UPDATE aperturas_iniciadas
+                SET expirada = 1,
+                    final_time = %s
+                WHERE apertura_code = %s
+            """, (final_time, apertura_code))
+            conn.commit()
+
+            flash("El tiempo de apertura ha expirado automáticamente.", "warning")
+            return jsonify({"expired": True, "message": "El tiempo de apertura ha expirado"}), 200
+
+        # Aún no expira: actualizar apertura_tiempo restante (opcional)
         cursor.execute("""
             UPDATE aperturas_iniciadas
             SET apertura_tiempo = %s
             WHERE apertura_code = %s
         """, (tiempo_restante, apertura_code))
         conn.commit()
+
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
+        conn.close()
 
     return jsonify({"success": True})
 
-# ==== ESTE ES EL TIEMPO DE VIDA DE UNA APERTURA (MODIFICABLE) ====
-TIEMPO_DE_VIDA_HORAS = 1  # <=== AQUÍ CAMBIAS LA DURACIÓN
 
 
 def get_db():
@@ -236,26 +278,47 @@ def home():
         acceso_ftp = bool(request.form.get('caja_opcion2'))
         descripcion = request.form.get('descripcion')
 
-        # Buscar remoto activo
+        # Obtener remoto_code del usuario
         cursor.execute("""
-            SELECT r.remoto_code, r.remoto_name 
-            FROM seleccion_check sc
-            JOIN remoto r ON sc.seleccion_dato_remoto = r.remoto_code
-            WHERE sc.seleccion_dato_proyecto = %s
-              AND sc.seleccion_dato_entorno = %s
-              AND sc.seleccionado = 1
-            LIMIT 1
-        """, (proyecto, entorno))
-        remoto_result = cursor.fetchone()
+            SELECT remoto_code 
+            FROM users 
+            WHERE username = %s
+        """, (user,))
+        user_remoto_info = cursor.fetchone()
 
-        if not remoto_result:
-            flash("No hay acceso activado para este proyecto y entorno. Solicítalo al administrador.", "danger")
+        if not user_remoto_info or user_remoto_info['remoto_code'] is None:
+            flash("Tu usuario no tiene un servidor remoto asignado. Contacta al administrador.", "danger")
             cursor.close()
             conn.close()
             return redirect(url_for('home'))
 
-        remoto_code = remoto_result['remoto_code']
-        remoto_nombre = remoto_result['remoto_name']
+        usuario_remoto_code = user_remoto_info['remoto_code']
+
+        # Verificar si existe un acceso activo para ese proyecto, entorno y remoto
+        cursor.execute("""
+            SELECT sc.*, r.remoto_name, udp.udp_ip, udp.udp_puertos
+            FROM seleccion_check sc
+            JOIN remoto r ON sc.seleccion_dato_remoto = r.remoto_code
+            JOIN udp ON sc.seleccion_dato_udp = udp.udp_code
+            WHERE sc.seleccionado = 1
+              AND sc.seleccion_dato_proyecto = %s
+              AND sc.seleccion_dato_entorno = %s
+              AND sc.seleccion_dato_remoto = %s
+            LIMIT 1
+        """, (proyecto, entorno, usuario_remoto_code))
+        
+        seleccion = cursor.fetchone()
+
+        if not seleccion:
+            flash("No tienes permiso para esta apertura: el acceso activo no corresponde con tu servidor remoto, proyecto y entorno. Solicitalo a algun administrador", "danger")
+            cursor.close()
+            conn.close()
+            return redirect(url_for('home'))
+
+        remoto_code = seleccion['seleccion_dato_remoto']
+        remoto_nombre = seleccion['remoto_name']
+        puertos = seleccion['udp_puertos'].split(',')
+        ip = seleccion['udp_ip']
 
         # Crear nuevo código de apertura
         cursor.execute("SELECT MAX(apertura_code) AS max_code FROM solicitud_apertura")
@@ -274,51 +337,36 @@ def home():
             acceso_bd, acceso_ftp, descripcion, apertura_code
         ))
 
-        # Buscar IP y puertos UDP para port knocking
-        cursor.execute("""
-            SELECT sc.*, udp.udp_ip, udp.udp_puertos 
-            FROM seleccion_check sc
-            JOIN udp ON sc.seleccion_dato_udp = udp.udp_code
-            WHERE sc.seleccionado = 1
-              AND sc.seleccion_dato_proyecto = %s
-              AND sc.seleccion_dato_entorno = %s
-        """, (proyecto, entorno))
-        seleccion = cursor.fetchone()
-
         now = datetime.now()
-        tiempo_limite = now + timedelta(minutes=2) # TIEMPOOOOO
+        tiempo_limite = now + timedelta(minutes=2)
+        tiempo_restante = 2  # minutos
 
-        if seleccion:
-            puertos = seleccion['udp_puertos'].split(',')
-            ip = seleccion['udp_ip']
-            
-            hacer_port_knocking(ip, puertos)
+        # Ejecutar port knocking
+        hacer_port_knocking(ip, puertos)
 
-            # Obtener nombres de proyecto y entorno
-            cursor.execute("SELECT proyecto_name FROM proyecto WHERE proyecto_code = %s", (proyecto,))
-            proyecto_nombre = cursor.fetchone()['proyecto_name']
+        # Obtener nombres para notificación
+        cursor.execute("SELECT proyecto_name FROM proyecto WHERE proyecto_code = %s", (proyecto,))
+        proyecto_nombre = cursor.fetchone()['proyecto_name']
 
-            cursor.execute("SELECT entorno_name FROM entorno WHERE entorno_code = %s", (entorno,))
-            entorno_nombre = cursor.fetchone()['entorno_name']
+        cursor.execute("SELECT entorno_name FROM entorno WHERE entorno_code = %s", (entorno,))
+        entorno_nombre = cursor.fetchone()['entorno_name']
 
-            tiempo_restante = 2  # minutos
+        enviar_notificacion_discord(user, proyecto_nombre, entorno_nombre, tiempo_restante,
+                             acceso_bd=acceso_bd, acceso_ftp=acceso_ftp,
+                             folio=folio, apertura_code=apertura_code,
+                             tipo_opcion=opcion)
 
-            enviar_notificacion_discord(user, proyecto_nombre, entorno_nombre, tiempo_restante, acceso_bd=True, acceso_ftp=False)
 
-            cursor.execute("""
-                INSERT INTO aperturas_iniciadas (apertura_code, apertura_tiempo, fecha_apertura)
-                VALUES (%s, %s, %s)
-            """, (apertura_code, tiempo_limite.time(), now))
-
-            flash("Apertura iniciada correctamente.", "success")
-
-        else:
-            flash("No se encontraron parámetros de red para esta selección. Contacta a soporte.", "warning")
+        cursor.execute("""
+            INSERT INTO aperturas_iniciadas (apertura_code, apertura_tiempo, fecha_apertura)
+            VALUES (%s, %s, %s)
+        """, (apertura_code, tiempo_limite.time(), now))
 
         conn.commit()
         cursor.close()
         conn.close()
 
+        flash("Apertura iniciada correctamente.", "success")
         return redirect(url_for('apertura', code=apertura_code))
 
     # GET: cargar listas
@@ -438,7 +486,11 @@ def finalizar_apertura():
     cursor = conexion.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT ai.*, sa.descripcion AS desc_solicitud, sa.proyecto_code, sa.entorno_code, sa.acceso_bd, sa.acceso_ftp
+        SELECT ai.*, 
+        sa.descripcion AS desc_solicitud, 
+        sa.proyecto_code, sa.entorno_code, 
+        sa.acceso_bd, sa.acceso_ftp,
+        sa.tipo_opcion, sa.folio, sa.apertura_code
         FROM aperturas_iniciadas ai
         JOIN solicitud_apertura sa ON ai.apertura_code = sa.apertura_code
         WHERE ai.apertura_code = %s AND sa.solicitud_usuario = %s
@@ -500,8 +552,13 @@ def finalizar_apertura():
         proyecto_nombre,
         entorno_nombre,
         acceso_bd=apertura.get('acceso_bd', False),
-        acceso_ftp=apertura.get('acceso_ftp', False)
+        acceso_ftp=apertura.get('acceso_ftp', False),
+        folio=apertura.get('folio'),
+        tipo_opcion=apertura.get('tipo_opcion'),
+        apertura_code=apertura.get('apertura_code'),
+        tiempo_resolucion=tiempo_resolucion
     )
+
 
     conexion.commit()
     cursor.close()
@@ -518,148 +575,6 @@ def parse_fecha(fecha_str):
         except ValueError:
             continue
     return None
-
-@app.route('/solicitudes')
-def solicitudes():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-
-    user = session['username']
-    role = session.get('role', 'user')
-
-    with closing(get_db()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
-        aperturas = []
-
-        query_finalizadas = """
-            SELECT f.idapertura, f.apertura_code, f.apertura_tiempo, f.final_time, f.fecha_apertura, f.descripcion,
-                   s.solicitud_usuario, s.tipo_opcion, s.folio,
-                   s.proyecto_code, s.entorno_code, s.descripcion AS descripcion_apertura,
-                   s.acceso_bd, s.acceso_ftp, 
-                   p.proyecto_name, e.entorno_name
-            FROM aperturas_finalizadas f
-            JOIN solicitud_apertura s ON f.apertura_code = s.apertura_code
-            JOIN proyecto p ON s.proyecto_code = p.proyecto_code
-            JOIN entorno e ON s.entorno_code = e.entorno_code
-        """
-        if role != 'admin':
-            query_finalizadas += " WHERE s.solicitud_usuario = %s"
-            query_finalizadas += " ORDER BY f.fecha_apertura DESC"
-            cursor.execute(query_finalizadas, (user,))
-        else:
-            query_finalizadas += " ORDER BY f.fecha_apertura DESC"
-            cursor.execute(query_finalizadas)
-
-        aperturas = cursor.fetchall()
-
-        # Convertir fecha_apertura a datetime si viene como string
-        for a in aperturas:
-            if isinstance(a['fecha_apertura'], str):
-                a['fecha_apertura'] = parse_fecha(a['fecha_apertura'])
-
-        # Obtener imágenes relacionadas
-        idaperturas = [a['idapertura'] for a in aperturas]
-        imagenes_dict = {}
-        if idaperturas:
-            format_strings = ','.join(['%s'] * len(idaperturas))
-            cursor.execute(f"""
-                SELECT apertura_id, imagen_path
-                FROM apertura_imagenes
-                WHERE apertura_id IN ({format_strings})
-            """, idaperturas)
-            imagenes = cursor.fetchall()
-            for img in imagenes:
-                key = img['apertura_id']
-                if key not in imagenes_dict:
-                    imagenes_dict[key] = []
-                imagenes_dict[key].append(img['imagen_path'])
-        for a in aperturas:
-            a['imagenes'] = imagenes_dict.get(a['idapertura'], [])
-
-    return render_template(
-        'solicitudes.html',
-        user=user,
-        role=role,
-        aperturas=aperturas,
-        vista='finalizadas',
-        total_pendientes=0
-    )
-
-
-
-@app.route('/mover_a_papelera/<int:apertura_code>', methods=['POST'])
-def mover_a_papelera(apertura_code):
-    if session.get('role') != 'admin':
-        return redirect(url_for('login'))
-
-    with closing(get_db()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
-        # Validar si ya está en papelera
-        cursor.execute("SELECT idpapelera FROM papelera WHERE apertura_code = %s", (apertura_code,))
-        ya_en_papelera = cursor.fetchone()
-        if ya_en_papelera:
-            flash('Esta apertura ya fue movida previamente a la papelera.', 'info')
-            return redirect(url_for('solicitudes', vista='finalizadas'))
-
-        # Obtener solicitud original
-        cursor.execute("SELECT * FROM solicitud_apertura WHERE apertura_code = %s", (apertura_code,))
-        solicitud = cursor.fetchone()
-        if not solicitud:
-            flash('Solicitud no encontrada.', 'danger')
-            return redirect(url_for('solicitudes'))
-
-        # Obtener idapertura para consultar imágenes
-        cursor.execute("SELECT idapertura FROM aperturas_finalizadas WHERE apertura_code = %s", (apertura_code,))
-        apertura = cursor.fetchone()
-        if not apertura:
-            flash('Apertura no encontrada.', 'danger')
-            return redirect(url_for('solicitudes'))
-
-        idapertura = apertura['idapertura']
-
-        # Obtener imágenes relacionadas con idimagen
-        cursor.execute("SELECT idimagen, imagen_path FROM apertura_imagenes WHERE apertura_id = %s", (idapertura,))
-        imagenes = cursor.fetchall()
-
-        # Insertar en la papelera
-        cursor.execute("""
-            INSERT INTO papelera (
-                solicitud_usuario, solicitud_remoto, tipo_opcion, folio,
-                proyecto_code, entorno_code, acceso_bd, acceso_ftp,
-                descripcion, apertura_code, fecha_creacion
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            solicitud.get('solicitud_usuario'),
-            solicitud.get('solicitud_remoto'),
-            solicitud.get('tipo_opcion'),
-            solicitud.get('folio'),
-            solicitud.get('proyecto_code'),
-            solicitud.get('entorno_code'),
-            solicitud.get('acceso_bd'),
-            solicitud.get('acceso_ftp'),
-            solicitud.get('descripcion'),
-            solicitud.get('apertura_code'),
-            solicitud.get('fecha_creacion'),
-        ))
-
-        idpapelera = cursor.lastrowid
-
-        # Insertar imágenes relacionadas en papelera_imagenes
-        for img in imagenes:
-            cursor.execute("""
-                INSERT INTO papelera_imagenes (idpapelera, idimagen)
-                VALUES (%s, %s)
-            """, (idpapelera, img['idimagen']))
-
-        # Borrar imágenes para evitar errores de llave foránea
-        cursor.execute("DELETE FROM apertura_imagenes WHERE apertura_id = %s", (idapertura,))
-
-        # Borrar registros padre
-        cursor.execute("DELETE FROM aperturas_finalizadas WHERE idapertura = %s", (idapertura,))
-        cursor.execute("DELETE FROM solicitud_apertura WHERE apertura_code = %s", (apertura_code,))
-
-        conn.commit()
-        flash('Solicitud movida a la papelera correctamente.', 'warning')
-
-    return redirect(url_for('solicitudes', vista='finalizadas'))
 
 
 
@@ -728,6 +643,71 @@ def actividades():
         actividades=actividades
     )
 
+
+@app.route('/solicitudes')
+def solicitudes():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    user = session['username']
+    role = session.get('role', 'user')
+
+    with closing(get_db()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
+        aperturas = []
+
+        query_finalizadas = """
+            SELECT f.idapertura, f.apertura_code, f.apertura_tiempo, f.final_time, f.fecha_apertura, f.descripcion,
+                   s.solicitud_usuario, s.tipo_opcion, s.folio,
+                   s.proyecto_code, s.entorno_code, s.descripcion AS descripcion_apertura,
+                   s.acceso_bd, s.acceso_ftp, 
+                   p.proyecto_name, e.entorno_name
+            FROM aperturas_finalizadas f
+            JOIN solicitud_apertura s ON f.apertura_code = s.apertura_code
+            JOIN proyecto p ON s.proyecto_code = p.proyecto_code
+            JOIN entorno e ON s.entorno_code = e.entorno_code
+        """
+        if role != 'admin':
+            query_finalizadas += " WHERE s.solicitud_usuario = %s"
+            query_finalizadas += " ORDER BY f.fecha_apertura DESC"
+            cursor.execute(query_finalizadas, (user,))
+        else:
+            query_finalizadas += " ORDER BY f.fecha_apertura DESC"
+            cursor.execute(query_finalizadas)
+
+        aperturas = cursor.fetchall()
+
+        # Convertir fecha_apertura a datetime si viene como string
+        for a in aperturas:
+            if isinstance(a['fecha_apertura'], str):
+                a['fecha_apertura'] = parse_fecha(a['fecha_apertura'])
+
+        # Obtener imágenes relacionadas
+        idaperturas = [a['idapertura'] for a in aperturas]
+        imagenes_dict = {}
+        if idaperturas:
+            format_strings = ','.join(['%s'] * len(idaperturas))
+            cursor.execute(f"""
+                SELECT apertura_id, imagen_path
+                FROM apertura_imagenes
+                WHERE apertura_id IN ({format_strings})
+            """, idaperturas)
+            imagenes = cursor.fetchall()
+            for img in imagenes:
+                key = img['apertura_id']
+                if key not in imagenes_dict:
+                    imagenes_dict[key] = []
+                imagenes_dict[key].append(img['imagen_path'])
+        for a in aperturas:
+            a['imagenes'] = imagenes_dict.get(a['idapertura'], [])
+
+    return render_template(
+        'solicitudes.html',
+        user=user,
+        role=role,
+        aperturas=aperturas,
+        vista='finalizadas',
+        total_pendientes=0
+    )
 
 
 
@@ -1176,47 +1156,6 @@ def accesos():
                            entornos=entornos,
                            udps=udps)
 
-
-
-
-@app.route("/papelera")
-def papelera():
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor(dictionary=True)
-
-    cursor.execute("""
-        SELECT 
-            p.idpapelera,
-            p.solicitud_usuario,
-            p.tipo_opcion,
-            p.folio,
-            p.descripcion,
-            p.fecha_creacion,
-            p.fecha_eliminacion,
-            p.acceso_bd,
-            p.acceso_ftp,
-            p.apertura_code,
-            pr.proyecto_name,
-            e.entorno_name,
-            GROUP_CONCAT(pi.imagen_path) AS imagenes
-        FROM papelera p
-        LEFT JOIN proyecto pr ON pr.idproyecto = p.proyecto_code
-        LEFT JOIN entorno e ON e.identorno = p.entorno_code
-        LEFT JOIN papelera_imagenes pi ON pi.idpapelera = p.idpapelera
-        GROUP BY p.idpapelera
-        ORDER BY p.fecha_eliminacion DESC;
-    """)
-
-    papelera = cursor.fetchall()
-    for fila in papelera:
-        fila["imagenes"] = fila["imagenes"].split(",") if fila["imagenes"] else []
-
-    conn.close()
-    return render_template("papelera.html", papelera=papelera, role="admin")
-
-
-
-
 @app.route('/insert_seleccion', methods=['POST'])
 def insert_seleccion():
     remoto = request.form.get('remoto')
@@ -1263,7 +1202,45 @@ def toggle_seleccion():
         seleccionado = int(seleccionado)
 
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+
+        # Obtener is_admin y remoto_code del usuario actual
+        cursor.execute("""
+            SELECT is_admin, remoto_code 
+            FROM users 
+            WHERE username = %s
+        """, (session.get('username'),))
+        user_info = cursor.fetchone()
+
+        if not user_info:
+            flash("Usuario no encontrado.", "danger")
+            cursor.close()
+            conn.close()
+            return redirect(url_for('accesos'))
+
+        # Obtener remoto del acceso que se intenta modificar
+        cursor.execute("""
+            SELECT seleccion_dato_remoto 
+            FROM seleccion_check 
+            WHERE idseleccion = %s
+        """, (id_seleccion,))
+        seleccion_info = cursor.fetchone()
+
+        if not seleccion_info:
+            flash("Acceso no encontrado.", "danger")
+            cursor.close()
+            conn.close()
+            return redirect(url_for('accesos'))
+
+        # Validar si el usuario puede activar este acceso
+        if seleccionado == 1:
+            if not user_info['is_admin'] and user_info['remoto_code'] != seleccion_info['seleccion_dato_remoto']:
+                flash("No puedes activar este acceso: el remoto asignado a tu usuario no coincide.", "danger")
+                cursor.close()
+                conn.close()
+                return redirect(url_for('accesos'))
+
+        # Si pasa la validación, actualizar
         cursor.execute("""
             UPDATE seleccion_check 
             SET seleccionado = %s 
@@ -1275,6 +1252,7 @@ def toggle_seleccion():
 
         mensaje = "Acceso activado correctamente." if seleccionado else "Acceso desactivado correctamente."
         flash(mensaje, 'success')
+
     except Exception as e:
         flash(f"Error al actualizar el acceso: {str(e)}", 'danger')
 
@@ -1283,24 +1261,245 @@ def toggle_seleccion():
 
 
 
+@app.route("/papelera")
+def papelera():
+    if session.get('role') != 'admin':
+        flash('No tienes permiso para acceder a esta sección', 'danger')
+        return redirect(url_for('home'))
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Consulta principal para obtener los elementos de la papelera
+        cursor.execute("""
+            SELECT 
+                p.idpapelera,
+                p.solicitud_usuario,
+                p.tipo_opcion,
+                p.folio,
+                p.descripcion,
+                p.fecha_creacion,
+                p.fecha_eliminacion,
+                p.acceso_bd,
+                p.acceso_ftp,
+                p.apertura_code,
+                pr.proyecto_name,
+                e.entorno_name,
+                r.remoto_name,
+                (SELECT COUNT(*) FROM papelera_imagenes WHERE idpapelera = p.idpapelera) AS total_imagenes
+            FROM papelera p
+            LEFT JOIN proyecto pr ON pr.proyecto_code = p.proyecto_code
+            LEFT JOIN entorno e ON e.entorno_code = p.entorno_code
+            LEFT JOIN remoto r ON r.remoto_code = p.solicitud_remoto
+            ORDER BY p.fecha_eliminacion DESC
+        """)
+        papelera = cursor.fetchall()
+
+        # Para cada elemento, obtener sus imágenes
+        for item in papelera:
+            cursor.execute("""
+                SELECT imagen_path 
+                FROM papelera_imagenes 
+                WHERE idpapelera = %s
+                ORDER BY idimagen_papelera ASC
+            """, (item['idpapelera'],))
+            item['imagenes'] = [img['imagen_path'] for img in cursor.fetchall()]
+
+    except Exception as e:
+        flash(f'Error al cargar la papelera: {str(e)}', 'danger')
+        papelera = []
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template("papelera.html", 
+                         papelera=papelera, 
+                         user=session.get('username'),
+                         role=session.get('role'))
+
+@app.route('/mover_a_papelera/<int:apertura_code>', methods=['POST'])
+def mover_a_papelera(apertura_code):
+    if session.get('role') != 'admin':
+        flash('No tienes permisos para esta acción', 'danger')
+        return redirect(url_for('login'))
+
+    conn = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Validación de existencia previa en papelera
+        cursor.execute("SELECT 1 FROM papelera WHERE apertura_code = %s LIMIT 1", (apertura_code,))
+        if cursor.fetchone():
+            flash('Esta apertura ya está en la papelera.', 'info')
+            return redirect(url_for('solicitudes', vista='finalizadas'))
+
+        # 2. Obtener datos de la solicitud y apertura
+        cursor.execute("""
+            SELECT sa.*, af.idapertura, af.descripcion as descripcion_final
+            FROM solicitud_apertura sa
+            LEFT JOIN aperturas_finalizadas af ON sa.apertura_code = af.apertura_code
+            WHERE sa.apertura_code = %s
+        """, (apertura_code,))
+        registro = cursor.fetchone()
+
+        if not registro:
+            flash('Registro no encontrado.', 'danger')
+            return redirect(url_for('solicitudes', vista='finalizadas'))
+
+        # 3. Insertar en papelera con transacción
+        cursor.execute("""
+            INSERT INTO papelera (
+                solicitud_usuario, solicitud_remoto, tipo_opcion, folio,
+                proyecto_code, entorno_code, acceso_bd, acceso_ftp,
+                descripcion, apertura_code, fecha_creacion, fecha_eliminacion
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            registro['solicitud_usuario'],
+            registro['solicitud_remoto'],
+            registro['tipo_opcion'],
+            registro['folio'],
+            registro['proyecto_code'],
+            registro['entorno_code'],
+            registro['acceso_bd'],
+            registro['acceso_ftp'],
+            registro['descripcion_final'] or registro['descripcion'],
+            registro['apertura_code'],
+            registro['fecha_creacion']
+        ))
+        idpapelera = cursor.lastrowid
+
+        # 4. Mover imágenes con información completa
+        cursor.execute("""
+            INSERT INTO papelera_imagenes (idpapelera, imagen_path, fecha_eliminacion)
+            SELECT %s, imagen_path, NOW()
+            FROM apertura_imagenes
+            WHERE apertura_id = %s
+        """, (idpapelera, registro['idapertura']))
+
+        # 5. Eliminar registros originales con verificación
+        if registro['idapertura']:
+            cursor.execute("DELETE FROM apertura_imagenes WHERE apertura_id = %s", (registro['idapertura'],))
+            cursor.execute("DELETE FROM aperturas_finalizadas WHERE idapertura = %s", (registro['idapertura'],))
+        
+        cursor.execute("DELETE FROM solicitud_apertura WHERE apertura_code = %s", (apertura_code,))
+
+        conn.commit()
+        
+        # Registrar acción en log
+        app.logger.info(f"Apertura {apertura_code} movida a papelera por {session.get('username')}")
+        flash('Registro movido a la papelera correctamente.', 'success')
+
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Error al mover a papelera: {err}")
+        flash('Ocurrió un error al mover el registro a la papelera.', 'danger')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Error inesperado: {e}")
+        flash('Error inesperado al procesar la solicitud.', 'danger')
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+    return redirect(url_for('solicitudes', vista='finalizadas'))
+
+
+@app.route('/eliminar_seleccionados', methods=['POST'])
+def eliminar_seleccionados():
+    if session.get('role') != 'admin':
+        flash('No tienes permiso para realizar esta acción', 'danger')
+        return redirect(url_for('papelera'))
+
+    data = request.get_json()
+    if not data or 'items' not in data:
+        flash('Datos inválidos para la eliminación', 'danger')
+        return redirect(url_for('papelera'))
+
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    success_count = 0
+    error_count = 0
+
+    try:
+        for item in data['items']:
+            apertura_code = item.get('apertura_code')
+            folio = item.get('folio')
+
+            try:
+                # 1. Eliminar imágenes asociadas de papelera_imagenes
+                cursor.execute("""
+                    DELETE FROM papelera_imagenes 
+                    WHERE idpapelera IN (
+                        SELECT idpapelera FROM papelera WHERE apertura_code = %s
+                    )
+                """, (apertura_code,))
+
+                # 2. Eliminar registro de la papelera
+                cursor.execute("DELETE FROM papelera WHERE apertura_code = %s", (apertura_code,))
+
+                # 3. Eliminar registro de solicitud_apertura si existe
+                cursor.execute("DELETE FROM solicitud_apertura WHERE apertura_code = %s", (apertura_code,))
+
+                success_count += 1
+            except Exception as e:
+                error_count += 1
+                print(f"Error al eliminar elemento {apertura_code}: {str(e)}")
+
+        conn.commit()
+
+        if success_count > 0:
+            flash(f'Se eliminaron correctamente {success_count} elementos', 'success')
+        if error_count > 0:
+            flash(f'Hubo problemas al eliminar {error_count} elementos', 'warning')
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error grave al eliminar elementos: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify({'redirect': url_for('papelera')})
+
+
 
 
 # ==========================
 # API INSERT SELECCION
 # ==========================
 
-def enviar_notificacion_discord(usuario, proyecto, entorno, tiempo_restante, acceso_bd=False, acceso_ftp=False):
-    WEBHOOK_URL = "https://discordapp.com/api/webhooks/1388199985610227783/QSvqY4ayPb2ekrtqXMC_QWLInj8tMODH96ZBInNnXF9LFs8qCWxMGsuSvQbVHKb57kvN"
+def enviar_notificacion_discord(usuario, proyecto, entorno, tiempo_restante, acceso_bd=False, acceso_ftp=False, folio=None, apertura_code=None, tipo_opcion=None):
+
+    WEBHOOK_URL = "https://discord.com/api/webhooks/1388702039982477424/Z9BLfhCik8rHjrK2Y_RlmUHv6ou98Pg6biBm_VpHngweGQY7xEnPe401arWg0lcYP-EE"
 
     fields = [
-        {"name": "👤 Usuario", "value": usuario, "inline": True},
-        {"name": "📁 Proyecto", "value": proyecto, "inline": True},
-        {"name": "🏗️ Entorno", "value": entorno, "inline": True},
+        {"name": "👤 Usuario", "value": usuario, "inline": False},
+        {"name": "📁 Proyecto", "value": proyecto, "inline": False},
+        {"name": "🏗️ Entorno", "value": entorno, "inline": False},
         {"name": "🕒 Fecha y hora de solicitud", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False},
-        {"name": "⏳ Tiempo de apertura", "value": f"{tiempo_restante} minutos", "inline": True}
+        {"name": "⏳ Tiempo de apertura", "value": f"{tiempo_restante} minutos", "inline": False}
     ]
 
-    # Añadir accesos si están activos
+    if folio and tipo_opcion:
+        tipo_label = "Ticket" if tipo_opcion.lower() == "Ticket" else "Tarea"
+        fields.append({
+            "name": f"🧾 {tipo_label}",
+            "value": f"#{folio}",
+            "inline": False
+        })
+
+    if apertura_code:
+        fields.insert(0, {
+            "name": "🔢 Código de apertura",
+            "value": f"#{apertura_code}",
+            "inline": False
+        })
+
     accesos_seleccionados = []
     if acceso_bd:
         accesos_seleccionados.append("Base de datos")
@@ -1337,32 +1536,55 @@ def enviar_notificacion_discord(usuario, proyecto, entorno, tiempo_restante, acc
 
 
 
-def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_bd=False, acceso_ftp=False):
-    WEBHOOK_URL = "https://discordapp.com/api/webhooks/1388199985610227783/QSvqY4ayPb2ekrtqXMC_QWLInj8tMODH96ZBInNnXF9LFs8qCWxMGsuSvQbVHKb57kvN"
+
+def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_bd=False, acceso_ftp=False, folio=None, tipo_opcion=None, apertura_code=None, tiempo_resolucion=None):
+    WEBHOOK_URL = "https://discord.com/api/webhooks/1388702039982477424/Z9BLfhCik8rHjrK2Y_RlmUHv6ou98Pg6biBm_VpHngweGQY7xEnPe401arWg0lcYP-EE"
 
     fields = [
-        {"name": "👤 Usuario", "value": usuario, "inline": True},
-        {"name": "📁 Proyecto", "value": proyecto, "inline": True},
-        {"name": "🏗️ Entorno", "value": entorno, "inline": True},
-        {"name": "🕒 Fecha y hora de cierre", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False},
+        {"name": "👤 Usuario", "value": usuario, "inline": False},
+        {"name": "📁 Proyecto", "value": proyecto, "inline": False},
+        {"name": "🏗️ Entorno", "value": entorno, "inline": False},
+        {"name": "🕒 Fecha y hora de cierre", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False}
     ]
 
-    accesos_seleccionados = []
-    if acceso_bd:
-        accesos_seleccionados.append("Base de datos")
-    if acceso_ftp:
-        accesos_seleccionados.append("FTP")
+    if folio and tipo_opcion:
+        tipo_label = "Ticket" if tipo_opcion.lower() == "ticket" else "Tarea"
+        fields.append({
+            "name": f"🧾 {tipo_label}",
+            "value": f"#{folio}",
+            "inline": False
+        })
 
-    if accesos_seleccionados:
+    if apertura_code:
+        fields.insert(0, {
+            "name": "🔢 Código de apertura",
+            "value": f"#{apertura_code}",
+            "inline": False
+        })
+
+    if tiempo_resolucion:
+        fields.append({
+            "name": "🕓 Tiempo total de la sesión",
+            "value": str(tiempo_resolucion),
+            "inline": False
+        })
+
+    accesos_usados = []
+    if acceso_bd:
+        accesos_usados.append("Base de datos")
+    if acceso_ftp:
+        accesos_usados.append("FTP")
+
+    if accesos_usados:
         fields.append({
             "name": "🔑 Accesos usados",
-            "value": ", ".join(accesos_seleccionados),
+            "value": ", ".join(accesos_usados),
             "inline": False
         })
 
     embed = {
         "title": "✅ Solicitud de apertura de puertos finalizada",
-        "color": 0x2ECC71, 
+        "color": 0x2ECC71,
         "fields": fields,
         "footer": {
             "text": "Sistema Apleeks · Seguridad de red"
@@ -1380,6 +1602,8 @@ def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_
             print(f"❌ Falló el envío a Discord: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"❌ Error al enviar notificación a Discord: {e}")
+
+
 
 
 # ============================
