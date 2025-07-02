@@ -1,0 +1,77 @@
+@app.route('/enviar_notificacion_expiracion', methods=['POST'])
+def enviar_notificacion_expiracion():
+    data = request.get_json()
+    
+    usuario = data.get('usuario', 'Desconocido')
+    proyecto = data.get('proyecto', 'Desconocido')
+    entorno = data.get('entorno', 'Desconocido')
+    folio = data.get('folio')
+    tipo_opcion = data.get('tipo_opcion')
+    acceso_bd = data.get('acceso_bd', False)
+    acceso_ftp = data.get('acceso_ftp', False)
+    apertura_code = data.get('apertura_code')
+    tiempo_asignado = data.get('tiempo_asignado', 'Desconocido')
+
+    WEBHOOK_URL = ""
+
+    # Estructura similar al embed de solicitud inicial
+    fields = []
+
+    if apertura_code:
+        fields.append({
+            "name": "🔢 Código de apertura",
+            "value": f"#{apertura_code}",
+            "inline": False
+        })
+
+    fields.extend([
+        {"name": "👤 Usuario", "value": usuario, "inline": False},
+        {"name": "📁 Proyecto", "value": proyecto, "inline": False},
+        {"name": "🏗️ Entorno", "value": entorno, "inline": False},
+        {"name": "⏳ Tiempo asignado", "value": f"{tiempo_asignado} minutos", "inline": False},
+        {"name": "🕒 Fecha y hora de expiración", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False}
+    ])
+
+    if folio and tipo_opcion:
+        tipo_label = "Ticket" if tipo_opcion.lower() == "ticket" else "Tarea"
+        fields.append({
+            "name": f"🧾 {tipo_label}",
+            "value": f"#{folio}",
+            "inline": False
+        })
+
+    accesos_usados = []
+    if acceso_bd:
+        accesos_usados.append("Base de datos")
+    if acceso_ftp:
+        accesos_usados.append("FTP")
+
+    if accesos_usados:
+        fields.append({
+            "name": "🔑 Accesos usados",
+            "value": ", ".join(accesos_usados),
+            "inline": False
+        })
+
+    embed = {
+        "title": "⛔ Conexión expirada automáticamente",
+        "color": 0xE74C3C,  # Rojo
+        "fields": fields,
+        "footer": {
+            "text": "Sistema Apleeks · Seguridad de red"
+        }
+    }
+
+    data = {
+        "username": "Apleeks Bot",
+        "embeds": [embed]
+    }
+
+    try:
+        response = requests.post(WEBHOOK_URL, json=data)
+        if response.status_code != 204:
+            print(f"❌ Falló el envío a Discord: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"❌ Error al enviar notificación a Discord: {e}")
+
+    return jsonify({"success": True})

@@ -61,69 +61,17 @@ def actualizar_tiempo_apertura():
     apertura_code = data.get('apertura_code')
     tiempo_restante = data.get('tiempo_restante', '')  # Formato HH:MM:SS
 
+    # Validación básica del formato
     if not re.match(r'^\d{2}:\d{2}:\d{2}$', tiempo_restante):
         return jsonify({"error": "Formato de tiempo no válido"}), 400
 
-    if not apertura_code or tiempo_restante == '':
-        return jsonify({"error": "Faltan datos"}), 400
+    # Verificar si el tiempo ha expirado (00:00:00)
+    if tiempo_restante == "00:00:00":
+        return jsonify({"expired": True, "message": "El tiempo de apertura ha expirado"}), 200
 
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
-        # Obtener apertura
-        cursor.execute("""
-            SELECT apertura_tiempo, fecha_apertura, expirada 
-            FROM aperturas_iniciadas 
-            WHERE apertura_code = %s
-        """, (apertura_code,))
-        apertura = cursor.fetchone()
-
-        if not apertura:
-            return jsonify({"error": "Código de apertura no encontrado"}), 404
-
-        if apertura['expirada'] == 1:
-            return jsonify({"expired": True, "message": "El tiempo de apertura ha expirado"}), 200
-
-        # Tiempo límite exacto = fecha_apertura (datetime) + duración (calculada desde apertura_tiempo)
-        fecha_apertura = apertura['fecha_apertura']
-        tiempo_limite_str = apertura['apertura_tiempo']
-        if not tiempo_limite_str:
-            return jsonify({"error": "Tiempo límite no registrado"}), 500
-
-        tiempo_limite_completo = datetime.combine(fecha_apertura.date(), datetime.strptime(tiempo_limite_str, '%H:%M:%S').time())
-        ahora = datetime.now()
-
-        if ahora >= tiempo_limite_completo:
-            # Tiempo vencido: marcar como expirada y registrar hora final
-            final_time = ahora.strftime('%H:%M:%S')
-            cursor.execute("""
-                UPDATE aperturas_iniciadas
-                SET expirada = 1,
-                    final_time = %s
-                WHERE apertura_code = %s
-            """, (final_time, apertura_code))
-            conn.commit()
-
-            flash("El tiempo de apertura ha expirado automáticamente.", "warning")
-            return jsonify({"expired": True, "message": "El tiempo de apertura ha expirado"}), 200
-
-        # Aún no expira: actualizar apertura_tiempo restante (opcional)
-        cursor.execute("""
-            UPDATE aperturas_iniciadas
-            SET apertura_tiempo = %s
-            WHERE apertura_code = %s
-        """, (tiempo_restante, apertura_code))
-        conn.commit()
-
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-    return jsonify({"success": True})
+    # En esta versión simplificada, no actualizamos nada en la base de datos
+    # Solo respondemos que el tiempo aún no ha expirado
+    return jsonify({"success": True, "message": "Tiempo actualizado"})
 
 
 
@@ -251,8 +199,9 @@ def home():
 
     # Validar si ya tiene una apertura activa
     cursor.execute("""
-        SELECT 1
+        SELECT sa.*, ai.apertura_tiempo, ai.fecha_apertura
         FROM solicitud_apertura sa
+        JOIN aperturas_iniciadas ai ON sa.apertura_code = ai.apertura_code
         WHERE sa.solicitud_usuario = %s
           AND EXISTS (
               SELECT 1 FROM aperturas_iniciadas ai
@@ -294,7 +243,7 @@ def home():
 
         usuario_remoto_code = user_remoto_info['remoto_code']
 
-        # Verificar si existe un acceso activo para ese proyecto, entorno y remoto
+        # Verificar si existe un acceso activo
         cursor.execute("""
             SELECT sc.*, r.remoto_name, udp.udp_ip, udp.udp_puertos
             FROM seleccion_check sc
@@ -310,7 +259,7 @@ def home():
         seleccion = cursor.fetchone()
 
         if not seleccion:
-            flash("No tienes permiso para esta apertura: el acceso activo no corresponde con tu servidor remoto, proyecto y entorno. Solicitalo a algun administrador", "danger")
+            flash("No tienes permiso para esta apertura: el acceso activo no corresponde con tu servidor remoto, proyecto y entorno.", "danger")
             cursor.close()
             conn.close()
             return redirect(url_for('home'))
@@ -338,8 +287,8 @@ def home():
         ))
 
         now = datetime.now()
-        tiempo_limite = now + timedelta(minutes=2)
-        tiempo_restante = 2  # minutos
+        duracion_minutos = 1  # Duración en minutos (puedes cambiarlo según necesites)
+        tiempo_limite_str = f"00:{duracion_minutos:02d}:00"  # Formato HH:MM:SS
 
         # Ejecutar port knocking
         hacer_port_knocking(ip, puertos)
@@ -351,16 +300,20 @@ def home():
         cursor.execute("SELECT entorno_name FROM entorno WHERE entorno_code = %s", (entorno,))
         entorno_nombre = cursor.fetchone()['entorno_name']
 
-        enviar_notificacion_discord(user, proyecto_nombre, entorno_nombre, tiempo_restante,
-                             acceso_bd=acceso_bd, acceso_ftp=acceso_ftp,
-                             folio=folio, apertura_code=apertura_code,
-                             tipo_opcion=opcion)
+        # Cuando se crea la apertura:
+        webhooks_utilizados = enviar_notificacion_discord(user, proyecto_nombre, entorno_nombre, duracion_minutos,
+                                acceso_bd=acceso_bd, acceso_ftp=acceso_ftp,
+                                folio=folio, apertura_code=apertura_code,
+                                tipo_opcion=opcion)
 
+        # Guardar los webhooks en la sesión
+        session['webhooks_notificacion'] = webhooks_utilizados
+        session.modified = True  # Asegurar que la sesión se guarde
 
         cursor.execute("""
             INSERT INTO aperturas_iniciadas (apertura_code, apertura_tiempo, fecha_apertura)
             VALUES (%s, %s, %s)
-        """, (apertura_code, tiempo_limite.time(), now))
+        """, (apertura_code, tiempo_limite_str, now))
 
         conn.commit()
         cursor.close()
@@ -390,8 +343,13 @@ def home():
 
     threading.Thread(target=mover_a_finalizadas).start()
 
-    return render_template("home.html", proyectos=proyectos, entornos=entornos,
-                           remoto_nombre=remoto_nombre, user=user, role=role)
+    return render_template("home.html", 
+                         proyectos=proyectos, 
+                         entornos=entornos,
+                         remoto_nombre=remoto_nombre, 
+                         user=user, 
+                         role=role,
+                         solicitud=ya_tiene_apertura)  # Pasar la solicitud activa si existe
 
 
 
@@ -546,7 +504,9 @@ def finalizar_apertura():
     cursor.execute("SELECT entorno_name FROM entorno WHERE entorno_code = %s", (apertura['entorno_code'],))
     entorno_nombre = cursor.fetchone()['entorno_name']
 
-    # Llamar a la función que envía la notificación a Discord
+    # En la ruta /finalizar_apertura:
+    webhooks = session.get('webhooks_notificacion', [])
+
     enviar_notificacion_finalizacion_discord(
         usuario,
         proyecto_nombre,
@@ -556,7 +516,8 @@ def finalizar_apertura():
         folio=apertura.get('folio'),
         tipo_opcion=apertura.get('tipo_opcion'),
         apertura_code=apertura.get('apertura_code'),
-        tiempo_resolucion=tiempo_resolucion
+        tiempo_resolucion=tiempo_resolucion,
+        webhooks=webhooks
     )
 
 
@@ -1120,14 +1081,16 @@ def accesos():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
 
-    # Traer datos de seleccion_check con joins
+    # Traer datos de seleccion_check con joins (incluyendo nuevos campos)
     cursor.execute("""
-        SELECT s.idseleccion, s.seleccionado, r.remoto_name, p.proyecto_name, e.entorno_name, u.udp_name
+        SELECT s.idseleccion, s.seleccionado, s.webhook, s.notificaciones,
+               r.remoto_name, p.proyecto_name, e.entorno_name, u.udp_name
         FROM seleccion_check s
         JOIN remoto r ON s.seleccion_dato_remoto = r.remoto_code
         JOIN proyecto p ON s.seleccion_dato_proyecto = p.proyecto_code
         JOIN entorno e ON s.seleccion_dato_entorno = e.entorno_code
         JOIN udp u ON s.seleccion_dato_udp = u.udp_code
+        ORDER BY s.idseleccion
     """)
     seleccionados = cursor.fetchall()
 
@@ -1163,6 +1126,8 @@ def insert_seleccion():
     entorno = request.form.get('entorno')
     udp = request.form.get('udp')
     seleccionado = request.form.get('seleccionado')
+    webhook = request.form.get('webhook', '')
+    notificaciones = request.form.get('notificaciones', 0)
 
     try:
         conn = get_db()
@@ -1174,9 +1139,10 @@ def insert_seleccion():
 
         cursor.execute("""
             INSERT INTO seleccion_check
-            (seleccion_dato_remoto, seleccion_dato_proyecto, seleccion_dato_entorno, seleccion_dato_udp, seleccion_code, seleccionado)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (remoto, proyecto, entorno, udp, nuevo_code, seleccionado))
+            (seleccion_dato_remoto, seleccion_dato_proyecto, seleccion_dato_entorno, 
+             seleccion_dato_udp, seleccion_code, seleccionado, webhook, notificaciones)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (remoto, proyecto, entorno, udp, nuevo_code, seleccionado, webhook, notificaciones))
 
         conn.commit()
         cursor.close()
@@ -1256,6 +1222,120 @@ def toggle_seleccion():
     except Exception as e:
         flash(f"Error al actualizar el acceso: {str(e)}", 'danger')
 
+    return redirect(url_for('accesos'))
+
+@app.route('/toggle_notificaciones', methods=['POST'])
+def toggle_notificaciones():
+    if 'username' not in session:
+        flash('Debes iniciar sesión para realizar esta acción', 'danger')
+        return redirect(url_for('login'))
+
+    id_seleccion = request.form.get('id')
+    notificaciones = request.form.get('notificaciones')
+
+    if not id_seleccion or notificaciones is None:
+        flash('Datos incompletos para la solicitud', 'danger')
+        return redirect(url_for('accesos'))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Verificar permisos del usuario
+        cursor.execute("""
+            SELECT u.is_admin, u.remoto_code, sc.seleccion_dato_remoto 
+            FROM users u
+            JOIN seleccion_check sc ON sc.idseleccion = %s
+            WHERE u.username = %s
+        """, (id_seleccion, session['username']))
+        
+        permiso = cursor.fetchone()
+        
+        if not permiso:
+            flash('Acceso no encontrado o no tienes permisos', 'danger')
+            return redirect(url_for('accesos'))
+
+        if not permiso['is_admin'] and permiso['remoto_code'] != permiso['seleccion_dato_remoto']:
+            flash('No tienes permisos para modificar estas notificaciones', 'warning')
+            return redirect(url_for('accesos'))
+
+        # Actualizar estado de notificaciones
+        cursor.execute("""
+            UPDATE seleccion_check 
+            SET notificaciones = %s 
+            WHERE idseleccion = %s
+        """, (notificaciones, id_seleccion))
+        
+        conn.commit()
+        flash('Estado de notificaciones actualizado correctamente', 'success')
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error al actualizar notificaciones: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('accesos'))
+
+@app.route('/update_seleccion', methods=['POST'])
+def update_seleccion():
+    data = request.form
+    id = data.get('id')
+    remoto = data.get('remoto')
+    proyecto = data.get('proyecto')
+    entorno = data.get('entorno')
+    udp = data.get('udp')
+    seleccionado = data.get('seleccionado')
+    webhook = data.get('webhook', '')
+    notificaciones = data.get('notificaciones', 0)
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE seleccion_check 
+            SET seleccion_dato_remoto = %s,
+                seleccion_dato_proyecto = %s,
+                seleccion_dato_entorno = %s,
+                seleccion_dato_udp = %s,
+                seleccionado = %s,
+                webhook = %s,
+                notificaciones = %s
+            WHERE idseleccion = %s
+        """, (remoto, proyecto, entorno, udp, seleccionado, webhook, notificaciones, id))
+        conn.commit()
+        
+        flash("Selección actualizada correctamente", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Error al actualizar selección: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('accesos'))
+
+@app.route('/delete_seleccion', methods=['POST'])
+def delete_seleccion():
+    id = request.form.get('id')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("DELETE FROM seleccion_check WHERE idseleccion = %s", (id,))
+        conn.commit()
+        
+        flash("Selección eliminada correctamente", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Error al eliminar selección: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+    
     return redirect(url_for('accesos'))
 
 
@@ -1474,98 +1554,144 @@ def eliminar_seleccionados():
 # ==========================
 
 def enviar_notificacion_discord(usuario, proyecto, entorno, tiempo_restante, acceso_bd=False, acceso_ftp=False, folio=None, apertura_code=None, tipo_opcion=None):
+    # Get database connection
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Get all active webhooks with notifications enabled for this project and environment
+        cursor.execute("""
+            SELECT webhook 
+            FROM seleccion_check 
+            WHERE seleccion_dato_proyecto = (
+                SELECT proyecto_code FROM proyecto WHERE proyecto_name = %s
+            )
+            AND seleccion_dato_entorno = (
+                SELECT entorno_code FROM entorno WHERE entorno_name = %s
+            )
+            AND notificaciones = 1
+            AND webhook IS NOT NULL
+            AND webhook != ''
+        """, (proyecto, entorno))
+        
+        webhooks = cursor.fetchall()
+        
+        if not webhooks:
+            print("No hay webhooks configurados o notificaciones desactivadas para esta combinación proyecto-entorno")
+            return
 
-    WEBHOOK_URL = "https://discord.com/api/webhooks/1388702039982477424/Z9BLfhCik8rHjrK2Y_RlmUHv6ou98Pg6biBm_VpHngweGQY7xEnPe401arWg0lcYP-EE"
+        fields = [
+            {"name": "👤 Usuario", "value": usuario, "inline": False},
+            {"name": "📁 Proyecto", "value": proyecto, "inline": False},
+            {"name": "🏗️ Entorno", "value": entorno, "inline": False},
+            {"name": "🕒 Fecha y hora de solicitud", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False},
+            {"name": "⏳ Tiempo de apertura", "value": f"{tiempo_restante} minutos", "inline": False}
+        ]
 
-    fields = [
-        {"name": "👤 Usuario", "value": usuario, "inline": False},
-        {"name": "📁 Proyecto", "value": proyecto, "inline": False},
-        {"name": "🏗️ Entorno", "value": entorno, "inline": False},
-        {"name": "🕒 Fecha y hora de solicitud", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False},
-        {"name": "⏳ Tiempo de apertura", "value": f"{tiempo_restante} minutos", "inline": False}
-    ]
+        if folio and tipo_opcion:
+            tipo_label = "Ticket" if tipo_opcion.lower() == "Ticket" else "Tarea"
+            fields.append({
+                "name": f"🧾 {tipo_label}",
+                "value": f"#{folio}",
+                "inline": False
+            })
 
-    if folio and tipo_opcion:
-        tipo_label = "Ticket" if tipo_opcion.lower() == "Ticket" else "Tarea"
-        fields.append({
-            "name": f"🧾 {tipo_label}",
-            "value": f"#{folio}",
-            "inline": False
-        })
+        if apertura_code:
+            fields.insert(0, {
+                "name": "🔢 Código de apertura",
+                "value": f"#{apertura_code}",
+                "inline": False
+            })
+
+        accesos_seleccionados = []
+        if acceso_bd:
+            accesos_seleccionados.append("Base de datos")
+        if acceso_ftp:
+            accesos_seleccionados.append("FTP")
+
+        if accesos_seleccionados:
+            fields.append({
+                "name": "🔑 Accesos otorgados",
+                "value": ", ".join(accesos_seleccionados),
+                "inline": False
+            })
+
+        embed = {
+            "title": "🔐 Solicitud de apertura de puertos",
+            "color": 0x2ECC71,
+            "fields": fields,
+            "footer": {
+                "text": "Sistema Apleeks · Seguridad de red"
+            }
+        }
+
+        data = {
+            "username": "Apleeks Bot",
+            "embeds": [embed]
+        }
+
+        # Send to all matching webhooks
+        for webhook in webhooks:
+            try:
+                response = requests.post(webhook['webhook'], json=data)
+                if response.status_code != 204:
+                    print(f"❌ Falló el envío a Discord (webhook: {webhook['webhook']}): {response.status_code} - {response.text}")
+            except Exception as e:
+                print(f"❌ Error al enviar notificación a Discord (webhook: {webhook['webhook']}): {e}")
+                
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+@app.route('/enviar_notificacion_expiracion', methods=['POST'])
+def enviar_notificacion_expiracion():
+    if 'username' not in session:
+        return jsonify({"success": False, "error": "No autenticado"}), 401
+
+    data = request.get_json()
+    
+    usuario = data.get('usuario', session.get('username', 'Desconocido'))
+    proyecto = data.get('proyecto', 'Desconocido')
+    entorno = data.get('entorno', 'Desconocido')
+    folio = data.get('folio')
+    tipo_opcion = data.get('tipo_opcion')
+    acceso_bd = data.get('acceso_bd', False)
+    acceso_ftp = data.get('acceso_ftp', False)
+    apertura_code = data.get('apertura_code')
+    tiempo_asignado = data.get('tiempo_asignado', 'Desconocido')
+
+    # Obtener webhooks de la sesión
+    webhooks = session.get('webhooks_notificacion', [])
+    
+    if not webhooks:
+        print("⚠️ No se encontraron webhooks en la sesión para notificación de expiración")
+        return jsonify({"success": False, "error": "No hay webhooks configurados"})
+
+    # Construir el embed
+    fields = []
 
     if apertura_code:
-        fields.insert(0, {
+        fields.append({
             "name": "🔢 Código de apertura",
             "value": f"#{apertura_code}",
             "inline": False
         })
 
-    accesos_seleccionados = []
-    if acceso_bd:
-        accesos_seleccionados.append("Base de datos")
-    if acceso_ftp:
-        accesos_seleccionados.append("FTP")
-
-    if accesos_seleccionados:
-        fields.append({
-            "name": "🔑 Accesos otorgados",
-            "value": ", ".join(accesos_seleccionados),
-            "inline": False
-        })
-
-    embed = {
-        "title": "🔐 Solicitud de apertura de puertos",
-        "color": 0x2ECC71,
-        "fields": fields,
-        "footer": {
-            "text": "Sistema Apleeks · Seguridad de red"
-        }
-    }
-
-    data = {
-        "username": "Apleeks Bot",
-        "embeds": [embed]
-    }
-
-    try:
-        response = requests.post(WEBHOOK_URL, json=data)
-        if response.status_code != 204:
-            print(f"❌ Falló el envío a Discord: {response.status_code} - {response.text}")
-    except Exception as e:
-        print(f"❌ Error al enviar notificación a Discord: {e}")
-
-
-
-
-def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_bd=False, acceso_ftp=False, folio=None, tipo_opcion=None, apertura_code=None, tiempo_resolucion=None):
-    WEBHOOK_URL = "https://discord.com/api/webhooks/1388702039982477424/Z9BLfhCik8rHjrK2Y_RlmUHv6ou98Pg6biBm_VpHngweGQY7xEnPe401arWg0lcYP-EE"
-
-    fields = [
+    fields.extend([
         {"name": "👤 Usuario", "value": usuario, "inline": False},
         {"name": "📁 Proyecto", "value": proyecto, "inline": False},
         {"name": "🏗️ Entorno", "value": entorno, "inline": False},
-        {"name": "🕒 Fecha y hora de cierre", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False}
-    ]
+        {"name": "⏳ Tiempo asignado", "value": f"{tiempo_asignado} minutos", "inline": False},
+        {"name": "🕒 Fecha y hora de expiración", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False}
+    ])
 
     if folio and tipo_opcion:
         tipo_label = "Ticket" if tipo_opcion.lower() == "ticket" else "Tarea"
         fields.append({
             "name": f"🧾 {tipo_label}",
             "value": f"#{folio}",
-            "inline": False
-        })
-
-    if apertura_code:
-        fields.insert(0, {
-            "name": "🔢 Código de apertura",
-            "value": f"#{apertura_code}",
-            "inline": False
-        })
-
-    if tiempo_resolucion:
-        fields.append({
-            "name": "🕓 Tiempo total de la sesión",
-            "value": str(tiempo_resolucion),
             "inline": False
         })
 
@@ -1583,25 +1709,154 @@ def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_
         })
 
     embed = {
-        "title": "✅ Solicitud de apertura de puertos finalizada",
-        "color": 0x2ECC71,
+        "title": "⛔ Conexión expirada automáticamente",
+        "color": 0xE74C3C,  # Rojo
         "fields": fields,
         "footer": {
             "text": "Sistema Apleeks · Seguridad de red"
         }
     }
 
-    data = {
+    payload = {
         "username": "Apleeks Bot",
         "embeds": [embed]
     }
 
-    try:
-        response = requests.post(WEBHOOK_URL, json=data)
-        if response.status_code != 204:
-            print(f"❌ Falló el envío a Discord: {response.status_code} - {response.text}")
-    except Exception as e:
-        print(f"❌ Error al enviar notificación a Discord: {e}")
+    # Enviar a todos los webhooks guardados
+    resultados = []
+    for webhook_url in webhooks:
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=5)
+            if response.status_code == 204:
+                resultados.append({"webhook": webhook_url, "status": "success"})
+            else:
+                resultados.append({
+                    "webhook": webhook_url,
+                    "status": "error",
+                    "message": f"{response.status_code} - {response.text}"
+                })
+                print(f"❌ Falló el envío a Discord (webhook: {webhook_url}): {response.status_code} - {response.text}")
+        except Exception as e:
+            resultados.append({
+                "webhook": webhook_url,
+                "status": "exception",
+                "message": str(e)
+            })
+            print(f"❌ Error al enviar notificación a Discord (webhook: {webhook_url}): {e}")
+
+    # Verificar si al menos un webhook tuvo éxito
+    success = any(r['status'] == 'success' for r in resultados)
+
+    return jsonify({
+        "success": success,
+        "results": resultados
+    })
+
+
+
+def enviar_notificacion_finalizacion_discord(usuario, proyecto, entorno, acceso_bd=False, acceso_ftp=False, 
+                                           folio=None, tipo_opcion=None, apertura_code=None, 
+                                           tiempo_resolucion=None, webhooks=None):
+    """
+    Envía notificación de finalización a Discord usando los mismos webhooks que la notificación inicial.
+    
+    Args:
+        usuario (str): Nombre del usuario que realizó la apertura
+        proyecto (str): Nombre del proyecto
+        entorno (str): Nombre del entorno
+        acceso_bd (bool): Indica si se dio acceso a base de datos
+        acceso_ftp (bool): Indica si se dio acceso FTP
+        folio (str): Número de ticket/tarea asociado
+        tipo_opcion (str): Tipo de opción (Ticket/Tarea)
+        apertura_code (int): Código único de la apertura
+        tiempo_resolucion (str): Duración total de la sesión
+        webhooks (list): Lista de URLs de webhooks de Discord guardados en sesión
+    
+    Returns:
+        bool: True si al menos un webhook recibió la notificación correctamente
+    """
+    
+    # Si no se proporcionan webhooks, intentar obtenerlos de la sesión
+    if webhooks is None:
+        webhooks = session.get('webhooks_notificacion', [])
+    
+    if not webhooks:
+        print("⚠️ No se encontraron webhooks en la sesión para notificación de finalización")
+        return False
+
+    # Construir el embed
+    fields = []
+
+    if apertura_code:
+        fields.append({
+            "name": "🔢 Código de apertura",
+            "value": f"#{apertura_code}",
+            "inline": False
+        })
+
+    fields.extend([
+        {"name": "👤 Usuario", "value": usuario, "inline": False},
+        {"name": "📁 Proyecto", "value": proyecto, "inline": False},
+        {"name": "🏗️ Entorno", "value": entorno, "inline": False},
+        {"name": "🕒 Fecha y hora de cierre", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "inline": False}
+    ])
+
+    if tiempo_resolucion:
+        fields.append({
+            "name": "⏱️ Duración total",
+            "value": tiempo_resolucion,
+            "inline": False
+        })
+
+    if folio and tipo_opcion:
+        tipo_label = "Ticket" if tipo_opcion.lower() == "ticket" else "Tarea"
+        fields.append({
+            "name": f"🧾 {tipo_label}",
+            "value": f"#{folio}",
+            "inline": False
+        })
+
+    accesos_usados = []
+    if acceso_bd:
+        accesos_usados.append("Base de datos")
+    if acceso_ftp:
+        accesos_usados.append("FTP")
+
+    if accesos_usados:
+        fields.append({
+            "name": "🔑 Accesos usados",
+            "value": ", ".join(accesos_usados),
+            "inline": False
+        })
+
+    embed = {
+        "title": "✅ Solicitud de apertura finalizada",
+        "color": 0x2ECC71,  # Verde
+        "fields": fields,
+        "footer": {
+            "text": "Sistema Apleeks · Seguridad de red"
+        }
+    }
+
+    payload = {
+        "username": "Apleeks Bot",
+        "embeds": [embed]
+    }
+
+    # Enviar a todos los webhooks guardados
+    success = False
+    for webhook_url in webhooks:
+        try:
+            response = requests.post(webhook_url, json=payload)
+            if response.status_code == 204:
+                success = True
+                print(f"✅ Notificación de finalización enviada correctamente a {webhook_url}")
+            else:
+                print(f"❌ Falló el envío a Discord (webhook: {webhook_url}): {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"❌ Error al enviar notificación a Discord (webhook: {webhook_url}): {e}")
+
+    return success
 
 
 

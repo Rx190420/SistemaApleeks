@@ -43,6 +43,28 @@
     .pagination .page-link:hover {
       color: #145c32;
     }
+
+    /* Estilo para los switches */
+.form-switch .form-check-input {
+  width: 2.5em;
+  height: 1.5em;
+  cursor: pointer;
+}
+
+.form-switch .form-check-input:checked {
+  background-color: #198754;
+  border-color: #198754;
+}
+
+.form-switch .form-check-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Estilo para el texto "Sin permisos" */
+.text-muted.small {
+  font-size: 0.75rem;
+}
     </style>
 </head>
 <body class="bg-light">
@@ -196,7 +218,9 @@
             <th>Proyecto</th>
             <th>Entorno</th>
             <th>UDP</th>
-            <th>Seleccionar</th>
+            <th>Webhook</th>
+            <th>Notificaciones</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -208,6 +232,25 @@
             <td>{{ sel.entorno_name }}</td>
             <td>{{ sel.udp_name }}</td>
             <td>
+              {% if sel.webhook %}
+                <span class="badge bg-success">Configurado</span>
+              {% else %}
+                <span class="badge bg-secondary">No configurado</span>
+              {% endif %}
+            </td>
+            <td>
+              <form action="{{ url_for('toggle_notificaciones') }}" method="POST" class="d-inline">
+                <input type="hidden" name="id" value="{{ sel.idseleccion }}">
+                <input type="hidden" name="notificaciones" value="{{ 0 if sel.notificaciones else 1 }}">
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="notif-{{ sel.idseleccion }}" 
+                        onchange="this.form.submit()" {% if sel.notificaciones %}checked{% endif %}>
+                  <label class="form-check-label" for="notif-{{ sel.idseleccion }}"></label>
+                </div>
+              </form>
+            </td>
+            <td>
+            <div class="d-flex justify-content-center gap-2">
               <form action="{{ url_for('toggle_seleccion') }}" method="POST" class="d-inline">
                 <input type="hidden" name="id" value="{{ sel.idseleccion }}">
                 <input type="hidden" name="seleccionado" value="{{ 0 if sel.seleccionado else 1 }}">
@@ -216,7 +259,29 @@
                   <label class="form-check-label" for="switch-{{ sel.idseleccion }}"></label>
                 </div>
               </form>
-            </td>
+              
+              <!-- Botón Editar -->
+              <button class="btn btn-sm btn-outline-primary" 
+                      data-bs-toggle="modal" 
+                      data-bs-target="#editModal"
+                      data-id="{{ sel.idseleccion }}"
+                      data-remoto="{{ sel.seleccion_dato_remoto }}"
+                      data-proyecto="{{ sel.seleccion_dato_proyecto }}"
+                      data-entorno="{{ sel.seleccion_dato_entorno }}"
+                      data-udp="{{ sel.seleccion_dato_udp }}"
+                      data-seleccionado="{{ sel.seleccionado }}">
+                <i class="bi bi-pencil"></i>
+              </button>
+              
+              <!-- Botón Eliminar -->
+              <form action="{{ url_for('delete_seleccion') }}" method="POST" class="d-inline">
+                <input type="hidden" name="id" value="{{ sel.idseleccion }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Estás seguro de eliminar este acceso?')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -234,6 +299,120 @@
     </nav>
   </div>
 </div>
+
+<!-- Modal para editar registro -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="w-100" action="{{ url_for('update_seleccion') }}" method="POST">
+      <input type="hidden" name="id" id="edit_id">
+      <div class="modal-content border-0 shadow-sm">
+        <div class="modal-header bg-light text-dark border-bottom">
+          <h5 class="modal-title fw-bold" id="editModalLabel">
+            <i class="bi bi-pencil-square me-2 text-muted"></i> Editar selección
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body small text-muted">
+          <!-- Campos para editar los datos -->
+          <div class="mb-3">
+            <label for="edit_remoto" class="form-label text-dark fw-bold">Remoto</label>
+            <select class="form-select form-select-sm" id="edit_remoto" name="remoto" required>
+              <option value="" disabled>Selecciona un remoto</option>
+              {% for r in remotos %}
+              <option value="{{ r.remoto_code }}">{{ r.remoto_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="edit_proyecto" class="form-label text-dark fw-bold">Proyecto</label>
+            <select class="form-select form-select-sm" id="edit_proyecto" name="proyecto" required>
+              <option value="" disabled>Selecciona un proyecto</option>
+              {% for p in proyectos %}
+              <option value="{{ p.proyecto_code }}">{{ p.proyecto_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="edit_entorno" class="form-label text-dark fw-bold">Entorno</label>
+            <select class="form-select form-select-sm" id="edit_entorno" name="entorno" required>
+              <option value="" disabled>Selecciona un entorno</option>
+              {% for e in entornos %}
+              <option value="{{ e.entorno_code }}">{{ e.entorno_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="edit_udp" class="form-label text-dark fw-bold">UDP</label>
+            <select class="form-select form-select-sm" id="edit_udp" name="udp" required>
+              <option value="" disabled>Selecciona un puerto UDP</option>
+              {% for u in udps %}
+              <option value="{{ u.udp_code }}">{{ u.udp_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+           <!-- Nuevo campo Webhook -->
+          <div class="mb-3">
+            <label for="edit_webhook" class="form-label text-dark fw-bold">Webhook URL</label>
+            <input type="text" class="form-control form-control-sm" id="edit_webhook" name="webhook" 
+                  placeholder="https://discord.com/api/webhooks/...">
+          </div>
+
+          <!-- Nuevo campo Notificaciones -->
+          <div class="mb-3">
+            <label for="edit_notificaciones" class="form-label text-dark fw-bold">Notificaciones</label>
+            <select class="form-select form-select-sm" id="edit_notificaciones" name="notificaciones">
+              <option value="0">Inactivas</option>
+              <option value="1">Activas</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="edit_seleccionado" class="form-label text-dark fw-bold">Activar</label>
+            <select class="form-select form-select-sm" id="edit_seleccionado" name="seleccionado" required>
+              <option value="0">No</option>
+              <option value="1">Sí</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer justify-content-between">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+            <i class="bi bi-x-lg me-1"></i> Cancelar
+          </button>
+          <button type="submit" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-check-circle me-1"></i> Guardar cambios
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Script para cargar datos en el modal de edición
+document.addEventListener('DOMContentLoaded', function() {
+  const editModal = document.getElementById('editModal');
+  
+  if (editModal) {
+    editModal.addEventListener('show.bs.modal', function(event) {
+      const button = event.relatedTarget;
+      
+      // Extraer datos del botón
+      document.getElementById('edit_id').value = button.getAttribute('data-id');
+      document.getElementById('edit_remoto').value = button.getAttribute('data-remoto');
+      document.getElementById('edit_proyecto').value = button.getAttribute('data-proyecto');
+      document.getElementById('edit_entorno').value = button.getAttribute('data-entorno');
+      document.getElementById('edit_udp').value = button.getAttribute('data-udp');
+      document.getElementById('edit_seleccionado').value = button.getAttribute('data-seleccionado');
+      document.getElementById('edit_webhook').value = button.getAttribute('data-webhook');
+      document.getElementById('edit_notificaciones').value = button.getAttribute('data-notificaciones');
+    });
+  }
+});
+</script>
 
 
 <!-- Modal para insertar nuevo registro -->
@@ -287,6 +466,22 @@
               {% for u in udps %}
               <option value="{{ u.udp_code }}">{{ u.udp_name }}</option>
               {% endfor %}
+            </select>
+          </div>
+
+          <!-- Nuevo campo Webhook -->
+          <div class="mb-3">
+            <label for="webhook" class="form-label text-dark fw-bold">Webhook URL</label>
+            <input type="text" class="form-control form-control-sm" id="webhook" name="webhook" 
+                  placeholder="https://discord.com/api/webhooks/...">
+          </div>
+
+          <!-- Nuevo campo Notificaciones -->
+          <div class="mb-3">
+            <label for="notificaciones" class="form-label text-dark fw-bold">Notificaciones</label>
+            <select class="form-select form-select-sm" id="notificaciones" name="notificaciones">
+              <option value="0">Inactivas</option>
+              <option value="1">Activas</option>
             </select>
           </div>
 

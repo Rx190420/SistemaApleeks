@@ -417,39 +417,44 @@
 document.addEventListener("DOMContentLoaded", function () {
   const aperturaCode = "{{ solicitud.apertura_code if solicitud else '' }}";
   const fechaApertura = "{{ solicitud.fecha_apertura.strftime('%Y-%m-%d %H:%M:%S') if solicitud else '' }}";
-  const tiempoLimite = "{{ solicitud.apertura_tiempo if solicitud else '' }}";
+  const tiempoLimite = "{{ solicitud.apertura_tiempo if solicitud else '00:00:00' }}";  // Formato HH:MM:SS
+  const usuario = "{{ user }}";
+  const proyecto = "{{ solicitud.proyecto_name if solicitud else '' }}";
+  const entorno = "{{ solicitud.entorno_name if solicitud else '' }}";
+  const folio = "{{ solicitud.folio if solicitud else '' }}";
+  const tipoOpcion = "{{ solicitud.tipo_opcion if solicitud else '' }}";
+  const accesoBd = "{{ solicitud.acceso_bd if solicitud else 'False' }}" === "True";
+  const accesoFtp = "{{ solicitud.acceso_ftp if solicitud else 'False' }}" === "True";
 
-  if (!aperturaCode || !fechaApertura || !tiempoLimite) return;
+  if (!aperturaCode || !fechaApertura || tiempoLimite === '00:00:00') return;
 
-  // Solo inicializamos la expiración si no está en localStorage
-  const keyExpiracion = `expiracion_${aperturaCode}`;
-  if (!localStorage.getItem(keyExpiracion)) {
-    const expiracion = new Date(`${fechaApertura.split(' ')[0]}T${tiempoLimite}`);
-    localStorage.setItem(keyExpiracion, expiracion.toISOString());
-  }
+  // Calcular la fecha de expiración
+  const [horasDuracion, minutosDuracion, segundosDuracion] = tiempoLimite.split(':').map(Number);
+  const fechaAperturaObj = new Date(fechaApertura);
+  const expiracion = new Date(fechaAperturaObj);
+  
+  expiracion.setHours(fechaAperturaObj.getHours() + horasDuracion);
+  expiracion.setMinutes(fechaAperturaObj.getMinutes() + minutosDuracion);
+  expiracion.setSeconds(fechaAperturaObj.getSeconds() + segundosDuracion);
 
   function actualizarContador() {
-    const expiracionStr = localStorage.getItem(keyExpiracion);
-    if (!expiracionStr) return;
-
-    const expiracion = new Date(expiracionStr);
     const ahora = new Date();
     const diff = expiracion - ahora;
 
     let texto = "";
     if (diff <= 0) {
       texto = "Conexión expirada";
-      enviarTiempoRestante("00:00:00");
-    } else {
-      const horas = Math.floor(diff / 1000 / 60 / 60);
-      const minutos = Math.floor((diff / 1000 / 60) % 60);
-      const segundos = Math.floor((diff / 1000) % 60);
-      texto = `${String(horas).padStart(2,'0')}:${String(minutos).padStart(2,'0')}:${String(segundos).padStart(2,'0')}`;
-
-      if (!window.ultimoEnvio || Date.now() - window.ultimoEnvio > 5000) {
-        enviarTiempoRestante(texto);
-        window.ultimoEnvio = Date.now();
+      
+      // Enviar notificación de expiración a Discord solo una vez
+      if (!localStorage.getItem(`notificado_${aperturaCode}`)) {
+        enviarNotificacionExpiracion();
+        localStorage.setItem(`notificado_${aperturaCode}`, 'true');
       }
+    } else {
+      const horas = Math.floor(diff / (1000 * 60 * 60));
+      const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const segundos = Math.floor((diff % (1000 * 60)) / 1000);
+      texto = `${String(horas).padStart(2,'0')}:${String(minutos).padStart(2,'0')}:${String(segundos).padStart(2,'0')}`;
     }
 
     const el = document.getElementById("contador");
@@ -458,17 +463,29 @@ document.addEventListener("DOMContentLoaded", function () {
     setTimeout(actualizarContador, 1000);
   }
 
-  function enviarTiempoRestante(tiempo) {
-    fetch("/actualizar_tiempo_apertura", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        apertura_code: aperturaCode,
-        tiempo_restante: tiempo
-      })
-    }).catch(console.error);
+  function enviarNotificacionExpiracion() {
+    if (usuario && proyecto && entorno && aperturaCode) {
+      fetch("/enviar_notificacion_expiracion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usuario: usuario,
+          proyecto: proyecto,
+          entorno: entorno,
+          folio: folio,
+          tipo_opcion: tipoOpcion,
+          acceso_bd: accesoBd,
+          acceso_ftp: accesoFtp,
+          apertura_code: aperturaCode,
+          tiempo_asignado: tiempoLimite
+        })
+      }).catch(error => {
+        console.error("Error al enviar notificación:", error);
+      });
+    }
   }
 
+  // Iniciar el contador
   actualizarContador();
 });
 </script>
