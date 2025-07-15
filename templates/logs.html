@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Apleeks Solicitud de apertura</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 1rem;
+            z-index: 2000;
+        }
+        .toast-custom {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast-custom.hide {
+            opacity: 0;
+        }
+        .form-check-center {
+            display: flex;
+            justify-content: center;
+        }
+
+        #accordionActividades .accordion-button:hover {
+            color: #198754 !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:hover::after {
+            filter: brightness(0) saturate(100%) invert(35%) sepia(84%) saturate(514%) hue-rotate(88deg) brightness(90%) contrast(94%);
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed) {
+            background-color: #198754 !important;
+            color: white !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed)::after {
+            filter: brightness(0) invert(1);
+        }
+
+        .log-entry {
+    background-color: #474747;
+    border-left: 4px solid transparent;
+    transition: background-color 0.2s ease;
+}
+.log-entry:hover {
+    background-color: #3a3a3a;
+}
+
+.log-apertura-de-puertos {
+    border-color: #198754;
+}
+.log-error {
+    border-color: #dc3545;
+}
+.log-alerta {
+    border-color: #ffc107;
+}
+.log-info {
+    border-color: #f08e0d;
+}
+
+.timeline {
+  position: relative;
+  padding: 2rem 1rem;
+  margin-left: 1rem;
+  border-left: 3px solid #198754;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 2rem;
+  padding-left: 2rem;
+}
+
+.timeline-icon {
+  position: absolute;
+  left: -1.4rem;
+  top: 0;
+  background-color: #fff;
+  border: 2px solid #198754;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  text-align: center;
+  line-height: 1.6rem;
+  font-size: 1.2rem;
+}
+
+.timeline-content {
+  background: #1e1e1e;
+  color: #ccc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+  transition: background-color 0.2s ease-in-out;
+}
+
+.timeline-content:hover {
+  background-color: #2a2a2a;
+}
+
+.terminal-card {
+  width: 100%;
+  max-width: 1100px;
+  height: 550px;
+  overflow-y: auto;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.05);
+  font-family: 'Segoe UI', sans-serif;
+  color: #333;
+}
+
+.terminal-card::-webkit-scrollbar {
+  width: 8px;
+}
+.terminal-card::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 4px;
+}
+.terminal-card::-webkit-scrollbar-thumb:hover {
+  background-color: #aaa;
+}
+
+.card-toolbar {
+  background-color: #ffffff;
+  border-bottom: 1px solid #ddd;
+  padding: 1rem;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+  border-left: 3px solid #198754;
+  margin-left: 0.5rem;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 2rem;
+  padding-left: 2rem;
+}
+
+.timeline-icon {
+  position: absolute;
+  left: -1.3rem;
+  top: 2px;
+  background-color: #fff;
+  border: 2px solid #198754;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  text-align: center;
+  line-height: 1.8rem;
+  font-size: 1.2rem;
+  color: #198754;
+}
+
+.timeline-content {
+  background: #ffffff;
+  padding: 1rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.timeline-content:hover {
+  background-color: #f1f1f1;
+}
+
+.timeline-content .text-muted {
+  font-size: 0.9rem;
+  color: #6c757d !important;
+}
+
+.timeline-content .badge {
+  font-size: 0.75rem;
+  padding: 0.4em 0.6em;
+  text-transform: capitalize;
+}
+
+
+.btn-group .btn {
+  border-radius: 0 !important;
+}
+
+.btn-group .btn:first-child {
+  border-top-left-radius: 0.3rem !important;
+  border-bottom-left-radius: 0.3rem !important;
+}
+
+.btn-group .btn:last-child {
+  border-top-right-radius: 0.3rem !important;
+  border-bottom-right-radius: 0.3rem !important;
+}
+
+
+
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarUser" aria-controls="navbarUser" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarUser">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+    {% if acceso_ftp == 1 %}
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('descargaFTP') }}"><i class="bi bi-file-earmark-arrow-down-fill"></i>Descarga FTP</a>
+    </li>
+    {% endif %}
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-white bg-success active" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-dark" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-white bg-success active" href="{{ url_for('logs') }}"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<!-- CONTENIDO PRINCIPAL -->
+<div class="container mb-4">
+  <div class="bg-white rounded shadow-sm p-4 bg-body">
+    <h2 class="fw-bold mb-4">Logs</h2>
+    <hr>
+
+    <div class="card terminal-card mx-auto">
+  <div class="card-toolbar">
+    <!-- Buscador -->
+    <div class="input-group w-50">
+      <input type="text" class="form-control form-control-sm" id="buscadorLogs" placeholder="Buscar en los logs...">
+    </div>
+
+    <!-- Filtros y configuración juntos -->
+<div class="btn-group btn-group-sm ms-2">
+  <button class="btn btn-outline-secondary filtro-log" data-tipo="Todos">Todos</button>
+  <button class="btn btn-outline-secondary filtro-log" data-tipo="Apertura de Puertos">Accesos</button>
+  <button class="btn btn-outline-secondary filtro-log" data-tipo="Descarga FTP">Descargas FTP</button>
+  <button class="btn btn-outline-secondary filtro-log" data-tipo="General">Sistema</button>
+  <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalWebhook">
+    <i class="bi bi-gear-fill"></i>
+  </button>
+</div>
+
+  </div>
+
+  <div class="card-body px-4 py-3">
+    <div class="timeline" id="timeline-logs">
+      {% for log in registros %}
+        <div class="timeline-item log-registro" data-tipo="{{ log.tipo_evento|lower }}" data-descripcion="{{ log.descripcion|lower }}">
+          <div class="timeline-icon">
+            {% if log.tipo_evento == 'Apertura de Puertos' %}
+              <i class="bi bi-door-open-fill"></i>
+            {% elif log.tipo_evento == 'Error' %}
+              <i class="bi bi-x-circle-fill text-danger"></i>
+            {% elif log.tipo_evento == 'Alerta' %}
+              <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+            {% elif log.tipo_evento == 'Acceso' %}
+              <i class="bi bi-person-check-fill text-primary"></i>
+            {% elif log.tipo_evento == 'Descarga FTP' %}
+              <i class="bi bi-download text-warning"></i>
+            {% else %}
+              <i class="bi bi-info-circle-fill text-success"></i>
+            {% endif %}
+          </div>
+          <div class="timeline-content">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <small class="text-muted">
+                {% if log.fecha_evento %}
+                  {{ log.fecha_evento.strftime('%d/%m/%Y %H:%M:%S') }}
+                {% else %}
+                  Sin fecha
+                {% endif %}
+              </small>
+              <span class="badge bg-light text-dark border">
+                {{ log.tipo_evento }}
+              </span>
+            </div>
+            <div>
+              <strong class="text-success">{{ log.usuario }}</strong>
+            </div>
+            <div class="text-muted">{{ log.descripcion }}</div>
+          </div>
+        </div>
+      {% else %}
+        <div class="text-muted">No hay registros disponibles.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+
+
+
+  </div>
+</div>
+
+<!-- MODAL DE CONFIGURACIÓN DE WEBHOOK -->
+<div class="modal fade" id="modalWebhook" tabindex="-1" aria-labelledby="modalWebhookLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" action="{{ url_for('config_webhook') }}">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalWebhookLabel"><i class="bi bi-discord"></i> Configuración de Webhook Discord</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label for="webhook_url" class="form-label">URL del Webhook</label>
+          <input type="url" class="form-control" id="webhook_url" name="webhook_url" value="{{ webhook.webhook_url if webhook }}">
+        </div>
+
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="notificaciones" name="notificaciones" value="1" {% if webhook.notificaciones %}checked{% endif %}>
+          <label class="form-check-label" for="notificaciones">Notificaciones activas</label>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-success">Guardar configuración</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const buscador = document.getElementById('buscadorLogs');
+    const filtros = document.querySelectorAll('.filtro-log');
+    const logs = document.querySelectorAll('.log-registro');
+
+    buscador.addEventListener('input', () => {
+      filtrarLogs();
+    });
+
+    filtros.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filtros.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filtrarLogs(btn.dataset.tipo);
+      });
+    });
+
+    function filtrarLogs(tipo = 'Todos') {
+      const texto = buscador.value.toLowerCase();
+
+      logs.forEach(log => {
+        const tipoLog = log.dataset.tipo;
+        const descripcion = log.dataset.descripcion;
+
+        const coincideTipo = (tipo === 'Todos') || tipoLog.includes(tipo.toLowerCase());
+        const coincideTexto = descripcion.includes(texto);
+
+        if (coincideTipo && coincideTexto) {
+          log.style.display = '';
+        } else {
+          log.style.display = 'none';
+        }
+      });
+    }
+  });
+</script>
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

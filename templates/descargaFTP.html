@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Apleeks Solicitud de apertura</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 1rem;
+            z-index: 2000;
+        }
+        .toast-custom {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast-custom.hide {
+            opacity: 0;
+        }
+        .form-check-center {
+            display: flex;
+            justify-content: center;
+        }
+
+        #accordionActividades .accordion-button:hover {
+            color: #198754 !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:hover::after {
+            filter: brightness(0) saturate(100%) invert(35%) sepia(84%) saturate(514%) hue-rotate(88deg) brightness(90%) contrast(94%);
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed) {
+            background-color: #198754 !important;
+            color: white !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed)::after {
+            filter: brightness(0) invert(1);
+        }
+
+        .dashboard-container {
+            max-width: 1000px; 
+            margin: 20px auto;
+        }
+        .card {
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+            padding: 2rem; 
+        }
+        .btn-center {
+            display: flex;
+            justify-content: center;
+        }
+
+        .code-subtle {
+          background-color: #f9f9f9;
+          color: #444;
+          padding: 7px 9px;
+          margin: 1px 10px 34px;
+          font-family: Consolas, monospace;
+          font-size: 14px;
+          border-radius: 6px;
+          border: 1px solid #ddd;
+          white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarUser" aria-controls="navbarUser" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarUser">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+    {% if acceso_ftp == 1 %}
+    <li class="nav-item">
+        <a class="nav-link text-white bg-success active" aria-current="page" href="{{ url_for('descargaFTP') }}"><i class="bi bi-file-earmark-arrow-down-fill"></i>Descarga FTP</a>
+    </li>
+    {% endif %}
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-dark" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-dark" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-dark" href="#"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<!-- CONTENIDO PRINCIPAL -->
+<div class="container mb-4">
+    <div class="bg-white rounded shadow-sm p-4 bg-body">
+        <h2 class="fw-bold mb-4">Descarga de archivos del FTP</h2>
+
+        <hr>
+
+        <div class="dashboard-container">
+    <div class="card">
+        <p class="text-center">
+            Presione el botón <strong>Iniciar Transferencia</strong> para comenzar a descargar y eliminar todos los archivos y carpetas del servidor FTP. <br>
+            Por favor, manténgase en esta página hasta que el proceso finalice.
+        </p>
+        <form method="POST" action="{{ url_for('descargaFTP') }}" id="ftpForm">
+        <div class="btn-center d-flex justify-content-center gap-2 p-4">
+            <button type="submit" name="accion" value="transferir" class="btn btn-success">Iniciar Transferencia</button>
+            <button type="submit" name="accion" value="buscar" class="btn btn-warning">Buscar archivos</button>
+        </div> 
+        </form>
+
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, msg in messages %}
+              <div class="alert alert-{{ category }} mt-4 text-center">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if archivos %}
+        <h5>Archivos encontrados en FTP:</h5>
+        <ul>
+            {% for archivo in archivos %}
+            <li>{{ archivo }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+
+        <hr>
+        <h4>Proceso:</h4>
+        <p>
+            Al hacer clic en <strong>"Iniciar transferencia"</strong>, el sistema se conectará al servidor FTP, descargará todos los archivos y carpetas del directorio remoto y los guardará en la siguiente ubicación local:
+        </p>
+
+        <div class="code-subtle">C:\Compartidos\Descargas\<span style="color:#777;">&lt;timestamp&gt;</span>\</div>
+
+        <p>
+            Al hacer clic en <strong>"Buscar archivos"</strong>, el sistema se conectará al servidor FTP y mostrará una lista de los archivos y carpetas disponibles en el directorio remoto, sin realizar ninguna descarga ni eliminación.
+        </p>
+
+        <p>Los archivos descargados y logs serán registrados en la base de datos y archivos locales.</p>
+    </div>  
+</div>
+
+    </div>
+</div>
+
+<!-- Modal de carga con mensajes dinámicos -->
+<div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 shadow p-4 bg-white">
+      <div class="d-flex flex-column justify-content-center align-items-center mb-3">
+        <div class="spinner-border text-success" role="status" style="width: 4rem; height: 4rem;">
+          <span class="visually-hidden">Cargando...</span>
+        </div>
+        <div id="loadingMessage" class="text-success fw-semibold fs-6 mt-3">Conectando al servidor FTP...</div>
+      </div>
+      <div id="loadingSubMessage" class="text-center text-success fw-bold fs-5">Por favor espere...</div>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+  document.getElementById('ftpForm').addEventListener('submit', () => {
+    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    const loadingMessage = document.getElementById('loadingMessage');
+    const loadingSubMessage = document.getElementById('loadingSubMessage');
+
+    loadingMessage.textContent = 'Conectando al servidor FTP...';
+    loadingSubMessage.textContent = 'Por favor espere...';
+
+    loadingModal.show();
+
+    setTimeout(() => {
+      loadingMessage.textContent = 'Descargando archivos...';
+      loadingSubMessage.textContent = 'Esto puede tardar unos minutos.';
+    }, 2500);
+  });
+</script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Apleeks Solicitudes Finalizadas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    .actividad-item[data-tipo] {
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+      border: 1px solid #198754;
+    }
+    .accordion-item .border-start {
+      border-left-width: 4px !important;
+      border-radius: 0 0 0.5rem 0.5rem;
+      margin-top: -1px;
+    }
+    /* Paginación con color verde para activo */
+    .pagination .page-item.active .page-link {
+      background-color: #198754;
+      border-color: #198754;
+      color: white;
+    }
+    .pagination .page-link {
+      color: #198754;
+    }
+    .pagination .page-link:hover {
+      color: #145c32;
+    }
+    
+    .solicitud-tabs a h2 {
+    transition: color 0.3s ease;
+  }
+
+  .solicitud-tabs a:hover h2 {
+    color: #198754 !important; /* Verde Bootstrap */
+  }
+
+  input[type="time"]::-webkit-datetime-edit-ampm-field {
+    display: none;
+  }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+    <div class="collapse navbar-collapse" id="navbarUser">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" data-bs-toggle="dropdown">
+            <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+            <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-white bg-success active" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+    {% if acceso_ftp == 1 %}
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('descargaFTP') }}"><i class="bi bi-file-earmark-arrow-down-fill"></i>Descarga FTP</a>
+    </li>
+    {% endif %}
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-dark" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-dark" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-dark" href="#"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<div class="container mb-4">
+  <div class="bg-white rounded shadow-sm p-4 bg-body">
+    <!-- Título dividido con enlaces -->
+    <div class="mb-4">
+        <h2 class="fw-bold">Solicituedes Finalizadas</h2>
+    </div>
+
+    <hr />
+
+    <!-- Filtros -->
+    <div class="row mb-3">
+      <div class="col-md-4 mb-2">
+        <input type="text" id="buscador" class="form-control" placeholder="Buscar por código, usuario, proyecto, folio o tipo" />
+      </div>
+      <div class="col-md-4 mb-2">
+        <select id="filtroTipo" class="form-select">
+            <option value="">Todos los tipos</option>
+            <option value="Tikect">Tikect</option>
+            <option value="tarea">Tarea</option>
+        </select>
+
+      </div>
+      <div class="col-md-4 mb-2 d-flex justify-content-end align-items-center">
+        <label for="registrosPorPagina" class="me-2 mb-0 fw-semibold text-muted">Ver por página:</label>
+        <select id="registrosPorPagina" class="form-select form-select-sm w-auto">
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Acordeones según vista -->
+  <div class="accordion" id="accordionSolicitudes">
+    {% if aperturas %}
+      {% for a in aperturas %}
+          <div
+            class="accordion-item actividad-item"
+            data-user="{{ a.solicitud_usuario|lower }}"
+            data-proyecto="{{ a.proyecto_name|lower }}"
+            data-entorno="{{ a.entorno_name|lower }}"
+            data-folio="{{ a.folio|lower }}"
+            data-tipo="{{ a.tipo_opcion|lower }}"
+            data-codigo="{{ a.apertura_code }}"
+          >
+            <h2 class="accordion-header" id="heading{{ loop.index }}">
+              <button
+                class="accordion-button collapsed fw-medium text-dark"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapse{{ loop.index }}"
+              >
+                <div class="d-flex flex-column w-100">
+                  <div>
+                    Apertura #{{ a.apertura_code }} - {{ a.solicitud_usuario }} - {{ a.tipo_opcion|capitalize }} #{{ a.folio }}
+                    <span class="badge bg-success ms-2">
+                      <i class="bi bi-check-circle-fill"></i> Finalizado
+                    </span>
+                  </div>
+                  <div class="text-muted small mt-1">
+                    Proyecto: {{ a.proyecto_name }} | Entorno: {{ a.entorno_name }}
+                  </div>
+                </div>
+              </button>
+            </h2>
+
+            <!-- Descripción de apertura: visible para todos -->
+            <div class="border-start border-4 border-success-subtle bg-light px-3 py-2 small text-dark">
+              <i class="bi bi-pencil-square text-black-50 me-1"></i>
+              <strong>Descripción de apertura:</strong> {{ a.descripcion_apertura }}
+            </div>
+
+            <div
+              id="collapse{{ loop.index }}"
+              class="accordion-collapse collapse"
+              data-bs-parent="#accordionSolicitudes"
+            >
+              <div class="accordion-body">
+                <div class="d-flex flex-wrap gap-4 mb-3">
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-person-fill opacity-50"></i> Solicitante
+                    </span>
+                    <span class="fw-semibold text-dark">{{ a.solicitud_usuario }}</span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-folder-fill opacity-50"></i> Proyecto
+                    </span>
+                    <span class="fw-semibold text-dark">{{ a.proyecto_name }}</span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-building-fill opacity-50"></i> Entorno
+                    </span>
+                    <span class="fw-semibold text-dark">{{ a.entorno_name }}</span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-clock-fill opacity-50"></i> Tiempo de resolución
+                    </span>
+                    <span class="fw-semibold text-dark">{{ a.final_time or 'N/A' }}</span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small"><i class="bi bi-database-fill-check opacity-50"></i> Requiere acceso BD</span>
+                    <span class="fw-semibold text-dark">
+                      {% if a.acceso_bd %}Sí{% else %}No{% endif %}
+                    </span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small"><i class="bi bi-hdd-network-fill opacity-50"></i> Requiere acceso FTP</span>
+                    <span class="fw-semibold text-dark">
+                      {% if a.acceso_ftp %}Sí{% else %}No{% endif %}
+                    </span>
+                  </div>
+
+                  <div class="d-flex flex-column">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-calendar-fill opacity-50"></i> Fecha de acceso
+                    </span>
+                    <span class="fw-semibold text-dark">{{ a.fecha_apertura.strftime('%d/%m/%Y %H:%M:%S') }}</span>
+                  </div>
+
+                  <div class="d-flex flex-column flex-grow-1" style="min-width: 250px;">
+                    <span class="text-secondary small d-flex align-items-center gap-1">
+                      <i class="bi bi-chat-left-text-fill opacity-50"></i> Observaciones finales
+                    </span>
+                    <span class="fst-italic text-muted">{{ a.descripcion or "Sin comentarios" }}</span>
+                  </div>
+                </div>
+
+                {% if a.imagenes %}
+                <hr>
+
+                  <div class="form-check form-switch d-flex align-items-center gap-2">
+                    <input 
+                      class="form-check-input toggleImagen" 
+                      type="checkbox" 
+                      role="switch"
+                      data-index="{{ loop.index }}" 
+                      id="toggleImagen{{ loop.index }}"
+                    >
+                    <label 
+                      class="form-check-label fw-semibold text-secondary" 
+                      for="toggleImagen{{ loop.index }}"
+                    >
+                      <i class="bi bi-image-fill me-1 opacity-50"></i> Mostrar imágenes ({{ a.imagenes|length }})
+                    </label>
+                  </div>
+
+                  <div class="imagenesDetalle mt-3 row g-2" data-index="{{ loop.index }}" style="display: none;">
+                    {% for img in a.imagenes %}
+                      <div class="col-md-3">
+                        <img 
+                          src="{{ url_for('uploads', filename=img) }}" 
+                          class="img-fluid rounded border shadow-sm" 
+                          alt="Imagen subida"
+                        />
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+
+                <!-- Botones para admins en actividades finalizadas -->
+                {% if role == 'admin' %}
+                <hr>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                  <form method="post" class="form-papelera">
+                    <input type="hidden" name="apertura_code" value="{{ a.apertura_code }}">
+                    <input type="hidden" name="folio" value="{{ a.folio }}">
+                    <button type="button" class="btn btn-outline-danger btn-sm btn-abrir-modal"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalPapelera"
+                            data-folio="{{ a.folio }}"
+                            data-apertura="{{ a.apertura_code }}">
+                      <i class="bi bi-trash"></i> Mover a papelera
+                    </button>
+                  </form>
+                </div>
+
+
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal de confirmación para papelera -->
+          <div class="modal fade" id="modalPapelera" tabindex="-1" aria-labelledby="modalPapeleraLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+              <div class="modal-content border-0 shadow-sm">
+                <div class="modal-header bg-light text-dark border-bottom">
+                  <h5 class="modal-title" id="modalPapeleraLabel">
+                    <i class="bi bi-info-circle me-2 text-muted"></i> Confirmar acción
+                  </h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body text-center text-muted small">
+                  ¿Deseas mover esta solicitud a la papelera?<br>
+                  <strong class="text-dark">Apertura: <span id="aperturaPapelera"></span></strong>
+                </div>
+                <div class="modal-footer justify-content-between">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" id="confirmarPapelera">Sí, mover</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% endfor %}
+        {% else %}
+        <div class="alert alert-secondary text-center">
+          No hay actividades finalizadas.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Contador de registros -->
+    <div class="text-muted small mt-2" id="contador-registros">
+      Mostrando 0 de 0 registros encontrados
+    </div>
+
+    <!-- Paginación -->
+    <nav aria-label="Paginación de resultados">
+      <ul class="pagination justify-content-center mt-4" id="paginacionLista"></ul>
+    </nav>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  let formSeleccionado = null;
+
+  document.querySelectorAll('.btn-abrir-modal').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const apertura = this.dataset.apertura;
+      formSeleccionado = this.closest('form');
+
+      document.getElementById("aperturaPapelera").innerText = apertura;
+    });
+  });
+
+  document.getElementById("confirmarPapelera").addEventListener("click", function () {
+    if (formSeleccionado) {
+      formSeleccionado.setAttribute("action", "/mover_a_papelera/" + formSeleccionado.querySelector('input[name="apertura_code"]').value);
+      formSeleccionado.submit();
+    }
+  });
+});
+
+</script>
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const buscador = document.getElementById("buscador");
+    const filtroTipo = document.getElementById("filtroTipo");
+    const registrosPorPagina = document.getElementById("registrosPorPagina");
+    const paginacionLista = document.getElementById("paginacionLista");
+    const contador = document.getElementById("contador-registros");
+    const items = Array.from(document.querySelectorAll(".actividad-item"));
+
+    let paginaActual = 1;
+    let itemsPorPagina = 5;
+    let mostrarTodasPaginas = false; // control para mostrar todas las páginas cuando se clickea "..."
+
+    function aplicarFiltros() {
+      const texto = buscador.value.trim().toLowerCase();
+      const tipoSeleccionado = filtroTipo.value.trim().toLowerCase();
+
+      return items.filter(item => {
+        const user = (item.dataset.user || '').toLowerCase();
+        const proyecto = (item.dataset.proyecto || '').toLowerCase();
+        const folio = (item.dataset.folio || '').toLowerCase();
+        const tipo = (item.dataset.tipo || '').toLowerCase();
+        const entorno = (item.dataset.entorno || '').toLowerCase();
+        const codigo = (item.dataset.codigo || '').toLowerCase();
+        const descripcion = (item.dataset.descripcion || '').toLowerCase();
+
+        const coincideTexto = user.includes(texto) ||
+                              proyecto.includes(texto) ||
+                              folio.includes(texto) ||
+                              tipo.includes(texto) ||
+                              entorno.includes(texto) ||
+                              codigo.includes(texto) ||
+                              descripcion.includes(texto);
+
+        const coincideTipo = tipoSeleccionado === '' || tipo === tipoSeleccionado;
+
+        return coincideTexto && coincideTipo;
+      });
+    }
+
+    function renderizarPaginacion(itemsFiltrados) {
+      const totalPaginas = Math.ceil(itemsFiltrados.length / itemsPorPagina);
+      paginacionLista.innerHTML = "";
+
+      // Botón "Previous"
+      const liPrev = document.createElement("li");
+      liPrev.className = "page-item" + (paginaActual === 1 ? " disabled" : "");
+      liPrev.innerHTML = `<a class="page-link" href="#">Anterior</a>`;
+      liPrev.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (paginaActual > 1) {
+          paginaActual--;
+          mostrarPagina(itemsFiltrados);
+          renderizarPaginacion(itemsFiltrados);
+        }
+      });
+      paginacionLista.appendChild(liPrev);
+
+      // Determinar qué páginas mostrar
+      const maxBotones = 6;
+      let paginasAMostrar = [];
+
+      if (totalPaginas <= maxBotones || mostrarTodasPaginas) {
+        // Mostrar todas las páginas
+        for (let i = 1; i <= totalPaginas; i++) {
+          paginasAMostrar.push(i);
+        }
+      } else {
+        // Mostrar sólo maxBotones páginas y el botón "..."
+        if (paginaActual <= maxBotones) {
+          // Mostrar desde la 1 hasta maxBotones
+          for (let i = 1; i <= maxBotones; i++) {
+            paginasAMostrar.push(i);
+          }
+          // Agregar botón "..."
+          paginasAMostrar.push('...'); 
+        } else {
+          // Si la página actual está después del rango visible, mostrar botón "..." para ir atrás
+          paginasAMostrar.push(1);
+          paginasAMostrar.push('...');
+          // Mostrar las páginas alrededor de la página actual
+          let start = paginaActual - 2;
+          let end = paginaActual + 2;
+          if (end > totalPaginas) end = totalPaginas;
+          for (let i = start; i <= end; i++) {
+            if (i > 1 && i < totalPaginas) {
+              paginasAMostrar.push(i);
+            }
+          }
+          if (end < totalPaginas) {
+            paginasAMostrar.push('...');
+            paginasAMostrar.push(totalPaginas);
+          }
+        }
+      }
+
+      // Crear botones de página según paginasAMostrar
+      paginasAMostrar.forEach(p => {
+        if (p === '...') {
+          const li = document.createElement("li");
+          li.className = "page-item";
+          li.innerHTML = `<a class="page-link" href="#">...</a>`;
+          li.style.cursor = "pointer";
+          li.addEventListener("click", (e) => {
+            e.preventDefault();
+            mostrarTodasPaginas = !mostrarTodasPaginas;
+            renderizarPaginacion(itemsFiltrados);
+          });
+          paginacionLista.appendChild(li);
+        } else {
+          const li = document.createElement("li");
+          li.className = "page-item" + (p === paginaActual ? " active" : "");
+          li.innerHTML = `<a class="page-link" href="#">${p}</a>`;
+          li.addEventListener("click", (e) => {
+            e.preventDefault();
+            paginaActual = p;
+            mostrarPagina(itemsFiltrados);
+            renderizarPaginacion(itemsFiltrados);
+          });
+          paginacionLista.appendChild(li);
+        }
+      });
+
+      // Botón "Next"
+      const liNext = document.createElement("li");
+      liNext.className =
+        "page-item" + (paginaActual === totalPaginas ? " disabled" : "");
+      liNext.innerHTML = `<a class="page-link" href="#">Siguiente</a>`;
+      liNext.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (paginaActual < totalPaginas) {
+          paginaActual++;
+          mostrarPagina(itemsFiltrados);
+          renderizarPaginacion(itemsFiltrados);
+        }
+      });
+      paginacionLista.appendChild(liNext);
+    }
+
+    function mostrarPagina(itemsFiltrados) {
+      items.forEach((item) => (item.style.display = "none"));
+      const inicio = (paginaActual - 1) * itemsPorPagina;
+      const fin = inicio + itemsPorPagina;
+      const visibles = itemsFiltrados.slice(inicio, fin);
+      visibles.forEach((item) => (item.style.display = "block"));
+
+      // Actualizar contador
+      contador.textContent = `Mostrando ${visibles.length} de ${itemsFiltrados.length} registros encontrados`;
+    }
+
+    function actualizarVista() {
+      paginaActual = 1;
+      mostrarTodasPaginas = false; // resetear el toggle
+      const filtrados = aplicarFiltros();
+      mostrarPagina(filtrados);
+      renderizarPaginacion(filtrados);
+    }
+
+    buscador.addEventListener("input", actualizarVista);
+    filtroTipo.addEventListener("change", actualizarVista);
+
+    registrosPorPagina.addEventListener("change", () => {
+      const valorSeleccionado = parseInt(registrosPorPagina.value);
+      if (!isNaN(valorSeleccionado)) {
+        itemsPorPagina = valorSeleccionado;
+        actualizarVista();
+      }
+    });
+
+    actualizarVista();
+
+    // Toggle mostrar imagen para cada checkbox
+    const checkboxes = document.querySelectorAll(".toggleImagen");
+    const contenedoresImagenes = document.querySelectorAll(".imagenesDetalle");
+
+    checkboxes.forEach((checkbox) => {
+      const index = checkbox.dataset.index;
+      const contenedor = document.querySelector(`.imagenesDetalle[data-index="${index}"]`);
+      if (contenedor) {
+        checkbox.addEventListener("change", () => {
+          contenedor.style.display = checkbox.checked ? "flex" : "none";
+        });
+      }
+    });
+
+  });
+</script>
+
+
+</body>
+</html>

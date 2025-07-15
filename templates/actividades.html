@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Apleeks Solicitud de apertura</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 1rem;
+            z-index: 2000;
+        }
+        .toast-custom {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast-custom.hide {
+            opacity: 0;
+        }
+        .form-check-center {
+            display: flex;
+            justify-content: center;
+        }
+
+
+        #accordionActividades .accordion-button:hover {
+            color: #198754 !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:hover::after {
+            filter: brightness(0) saturate(100%) invert(35%) sepia(84%) saturate(514%) hue-rotate(88deg) brightness(90%) contrast(94%);
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed) {
+            background-color: #198754 !important;
+            color: white !important;
+            border-color: #198754 !important;
+        }
+
+        #accordionActividades .accordion-button:not(.collapsed)::after {
+            filter: brightness(0) invert(1);
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarUser" aria-controls="navbarUser" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarUser">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+    {% if acceso_ftp == 1 %}
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('descargaFTP') }}"><i class="bi bi-file-earmark-arrow-down-fill"></i>Descarga FTP</a>
+    </li>
+    {% endif %}
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-white bg-success active" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-dark" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-dark" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-dark" href="#"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<!-- CONTENIDO PRINCIPAL -->
+<div class="container mb-4">
+    <div class="bg-white rounded shadow-sm p-4 bg-body">
+        <h2 class="fw-bold mb-4">Actividades Iniciadas</h2>
+        <hr>
+
+        <!-- Buscador y Filtro -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <input type="text" id="buscador" class="form-control" placeholder="Buscar por código, usuario, proyecto o tipo">
+            </div>
+            <div class="col-md-6">
+                <select id="filtroTipo" class="form-select">
+                    <option value="">Todos los tipos</option>
+                    <option value="Tikect">Tikect</option>
+                    <option value="Tarea">Tarea</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="accordion" id="accordionSolicitudes">
+    {% if actividades %}
+        {% for a in actividades %}
+            <div class="accordion-item actividad-item mb-3 border border-2 border-success rounded" data-user="{{ a.solicitud_usuario|lower }}" data-proyecto="{{ a.proyecto_code|lower }}" data-folio="{{ a.folio|lower }}" data-tipo="{{ a.tipo_opcion|lower }}">
+                <h2 class="accordion-header" id="heading{{ loop.index }}">
+                    <button class="accordion-button collapsed fw-medium text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
+                        <div class="d-flex flex-column w-100">
+                            <div>
+                                Apertura #{{ a.apertura_code }} - {{ a.solicitud_usuario }} - {{ a.tipo_opcion|capitalize }} folio: #{{ a.folio }}
+                                {% if a.estado == 'activa' %}
+                                    <span class="badge bg-success ms-2">
+                                        <i class="bi bi-toggle-on"></i> Activa
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger ms-2">
+                                        <i class="bi bi-toggle-off"></i> Expirada
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="text-muted small mt-1">
+                                Proyecto: {{ a.proyecto_name }} | Entorno: {{ a.entorno_name }}
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+
+                <div class="border-start border-4 border-success-subtle bg-light px-3 py-2 small text-dark">
+                    <i class="bi bi-pencil-square text-black-50 me-1"></i>
+                    <strong>Descripción de apertura:</strong> {{ a.descripcion or "Sin comentarios" }}
+                </div>
+
+                <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#accordionSolicitudes">
+                    <div class="accordion-body">
+                        <div class="d-flex flex-wrap gap-4 mb-3">
+                            <div class="d-flex flex-column">
+                                <span class="text-secondary small"><i class="bi bi-person-fill opacity-50"></i> Solicitante</span>
+                                <span class="fw-semibold text-dark">{{ a.solicitud_usuario }}</span>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <span class="text-secondary small"><i class="bi bi-folder-fill opacity-50"></i> Proyecto</span>
+                                <span class="fw-semibold text-dark">{{ a.proyecto_name }}</span>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <span class="text-secondary small"><i class="bi bi-building-fill opacity-50"></i> Entorno</span>
+                                <span class="fw-semibold text-dark">{{ a.entorno_name }}</span>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <span class="text-secondary small"><i class="bi bi-clock-fill opacity-50"></i> Tiempo de resolución</span>
+                                <span class="fw-semibold text-dark">{{ a.apertura_tiempo_str }}</span>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <span class="text-secondary small"><i class="bi bi-calendar-fill opacity-50"></i> Fecha de acceso</span>
+                                <span class="fw-semibold text-dark">{{ a.fecha_apertura_str }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-secondary text-center">No hay actividades iniciadas.</div>
+    {% endif %}
+</div>
+
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const buscador = document.getElementById('buscador');
+    const filtroTipo = document.getElementById('filtroTipo');
+    const items = document.querySelectorAll('.actividad-item');
+
+    function filtrar() {
+        const texto = buscador.value.trim().toLowerCase();
+        const tipoSeleccionado = filtroTipo.value.trim().toLowerCase();
+
+        items.forEach(item => {
+            const user = (item.dataset.user || '').toLowerCase();
+            const proyecto = (item.dataset.proyecto || '').toLowerCase();
+            const folio = (item.dataset.folio || '').toLowerCase();
+            const tipo = (item.dataset.tipo || '').toLowerCase();
+            const entorno = (item.dataset.entorno || '').toLowerCase();
+            const codigo = (item.dataset.codigo || '').toLowerCase();
+            const descripcion = (item.dataset.descripcion || '').toLowerCase();
+
+            const coincideTexto = user.includes(texto) ||
+                                proyecto.includes(texto) ||
+                                folio.includes(texto) ||
+                                tipo.includes(texto) ||
+                                entorno.includes(texto) ||
+                                codigo.includes(texto) ||
+                                descripcion.includes(texto);
+
+            const coincideTipo = tipoSeleccionado === '' || tipo === tipoSeleccionado;
+
+            item.style.display = (coincideTexto && coincideTipo) ? 'block' : 'none';
+        });
+        }
+
+    buscador.addEventListener('input', filtrar);
+    filtroTipo.addEventListener('change', filtrar);
+
+    // Mostrar/ocultar imágenes
+    document.querySelectorAll('.toggleImagen').forEach(switchElem => {
+        switchElem.addEventListener('change', function () {
+            const index = this.dataset.index;
+            const contenedor = document.querySelector(`.imagenesDetalle[data-index="${index}"]`);
+            if (contenedor) {
+                contenedor.style.display = this.checked ? 'flex' : 'none';
+            }
+        });
+    });
+});
+</script>
+
+</body>
+</html>

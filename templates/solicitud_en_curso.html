@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Apleeks Solicitud de apertura</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 1rem;
+            z-index: 2000;
+        }
+        .toast-custom {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast-custom.hide {
+            opacity: 0;
+        }
+        .form-check-center {
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Estilo base común */
+        .finalozarAcceso,
+        .boton2 {
+            font-weight: 600;
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+            border: 2px solid #b02a37;
+            font-size: 1rem;
+        }
+
+        /* Botón principal (rojo sólido) */
+        .finalozarAcceso {
+            background-color: #b02a37;
+            color: #fff;
+            box-shadow: 0 4px 10px rgba(176, 42, 55, 0.4);
+        }
+
+        .finalozarAcceso i {
+            margin-right: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        /* Botón secundario (transparente con borde rojo) */
+        .boton2 {
+            background-color: transparent;
+            color: #b02a37;
+            box-shadow: none;
+        }
+
+        /* Hover: fondo gris claro para que resalte sobre blanco */
+        .finalozarAcceso:hover,
+        .boton2:hover {
+            background-color: #f8d7da; /* gris rosado claro */
+            color: #b02a37;
+            box-shadow: 0 4px 10px rgba(176, 42, 55, 0.3);
+        }
+
+        /* Focus */
+        .finalozarAcceso:focus,
+        .boton2:focus {
+            outline: none;
+            box-shadow: 0 0 0 0.25rem rgba(176, 42, 55, 0.3);
+        }
+
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR SUPERIOR -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom border-success shadow-sm">
+    <div class="container-fluid">
+        <a class="navbar-brand text-success fw-bold fs-4" href="#">Apleeks</a>
+        
+        <!-- Botón para móviles -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarUser" aria-controls="navbarUser" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Menú colapsable -->
+        <div class="collapse navbar-collapse" id="navbarUser">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-1 fs-5"></i> {{ user }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/home"><i class="bi bi-house-door me-2"></i>Inicio</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- CONTENEDOR DE TOASTS EN ESQUINA SUPERIOR DERECHA -->
+<div id="toast-container" class="position-fixed end-0 p-3" style="top: 55px; z-index: 2000;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast show mb-3 border border-light shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="toast-header bg-{{ 
+            'success' if category == 'success' else 
+            'danger' if category == 'danger' else 
+            'warning' if category == 'warning' else 
+            'info' }}">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong class="me-auto text-white text-capitalize">{{ category }}</strong>
+            <small class="text-white">{{ now().strftime('%H:%M') }}</small>
+            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">
+            {{ message }}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(toastEl => {
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    });
+  });
+</script>
+
+<div class="container mt-5">
+
+    <ul class="nav nav-tabs justify-content-center fw-bold fs-6">
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('home') }}"><i class="bi bi-house-fill"></i> Home</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-white bg-success active" aria-current="page" href="{{ url_for('apertura') }}"><i class="bi bi-key-fill"></i> Apertura</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('solicitudes') }}"><i class="bi bi-list-task"></i> Solicitudes</a>
+    </li>
+    {% if acceso_ftp == 1 %}
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('descargaFTP') }}"><i class="bi bi-file-earmark-arrow-down-fill"></i>Descarga FTP</a>
+    </li>
+    {% endif %}
+
+    {% if role == 'admin' %}
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" aria-current="page" href="{{ url_for('actividades') }}"><i class="bi bi-activity"></i> Actividades</a>
+    </li>
+
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-dark" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false"><i class="bi bi-gear-fill"></i> Configuracion</a>
+        <ul class="dropdown-menu">
+        <li><a class="dropdown-item text-dark" href="{{ url_for('accesos') }}"><i class="bi bi-door-open-fill"></i> Accesos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('usuarios') }}"><i class="bi bi-people-fill"></i> Usuarios</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('proyectos') }}"><i class="bi bi-folder-fill"></i> Proyectos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('entornos') }}"><i class="bi bi-box-fill"></i> Entornos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('remotos') }}"><i class="bi bi-hdd-fill"></i> Servidores remotos</a></li>
+        <li><a class="dropdown-item text-dark" href="{{ url_for('puertosUDP') }}"><i class="bi bi-hdd-network-fill"></i> Puertos UDP</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-dark" href="#"><i class="bi bi-eyeglasses"></i> Logs</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-trash-fill"></i> Papelera</a></li>
+        </ul>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link text-dark" href="#"><i class="bi bi-window-dash"></i> Dashboard</a>
+    </li>
+
+{% endif %}
+
+    </ul>
+
+</div>
+
+<!-- CONTENIDO PRINCIPAL AQUÍ -->
+<div class="container mb-4">
+    <div class="bg-white rounded shadow-sm p-4 bg-body">
+        {% if solicitud %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="fs-5 fw-bold text-body-secondary">
+                    <button type="button" class="btn btn-outline-success me-2" data-bs-toggle="tooltip" data-bs-placement="top"
+                        data-bs-custom-class="custom-tooltip" data-bs-title="Tiempo estimado de tu Acceso.">
+                        <i class="bi bi-info-lg"></i>
+                    </button>
+                    <i class="bi bi-clock-history me-2"></i> Tiempo restante: <span id="contador-{{ solicitud.apertura_code }}" class="fw-bold text-success">--:--:--</span>
+                </div>
+                <div class="text-end">
+                    <strong>Fecha de Acceso:</strong> {{ solicitud.fecha_apertura }}
+                </div>
+            </div>
+
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+                    tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl)
+                    })
+                });
+            </script>
+
+            <hr>
+
+            <!-- ... aquí va TODO el bloque de card con información del acceso ... -->
+                <div class=" mt-4">
+                    <div class="card-body">
+                            <h2 class="card-title mb-4 fw-bold">
+                                Código de Acceso: <span class="fw-bold text-success">#{{ solicitud.apertura_code }}</span>
+                            </h2>
+
+                            <!-- Contenedor colapsable sin botón visible -->
+                            <div class="card card-body bg-white shadow-sm rounded">
+
+                                <div class="accordion" id="accordionSolicitud">
+                                    <div class="accordion-item actividad-item"
+                                        data-user="{{ solicitud.solicitud_usuario|lower }}"
+                                        data-proyecto="{{ solicitud.proyecto_name|lower }}"
+                                        data-entorno="{{ solicitud.entorno_name|lower }}"
+                                        data-folio="{{ solicitud.folio|lower }}"
+                                        data-tipo="{{ solicitud.tipo_opcion|lower }}"
+                                        data-codigo="{{ solicitud.apertura_code }}"
+                                        data-fecha-apertura="{{ solicitud.fecha_apertura.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                                        data-tiempo="{{ solicitud.apertura_tiempo }}">
+
+                                        
+                                        <h2 class="accordion-header" id="heading1">
+                                            <button class="accordion-button fw-medium text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                                                <div class="d-flex flex-column w-100">
+                                                    <div>
+                                                        Apertura #{{ solicitud.apertura_code }} - {{ solicitud.solicitud_usuario }} - {{ solicitud.tipo_opcion|capitalize }} #{{ solicitud.folio }}
+                                                        <span class="badge bg-success ms-2">
+                                                            <i class="bi bi-hourglass-split"></i> En curso
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-muted small mt-1">
+                                                        Proyecto: {{ solicitud.proyecto_name }} | Entorno: {{ solicitud.entorno_name }}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        </h2>
+
+                                        <div class="border-start border-4 border-success-subtle bg-light px-3 py-2 small text-dark">
+                                            <i class="bi bi-pencil-square text-black-50 me-1"></i>
+                                            <strong>Descripción inicial:</strong> {{ solicitud.descripcion }}
+                                        </div>
+
+                                        <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#accordionSolicitud">
+                                            <div class="accordion-body">
+                                                <div class="d-flex flex-wrap gap-4 mb-3">
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                                            <i class="bi bi-person-fill opacity-50"></i> Solicitante
+                                                        </span>
+                                                        <span class="fw-semibold text-dark">{{ solicitud.solicitud_usuario }}</span>
+                                                    </div>
+
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                                            <i class="bi bi-folder-fill opacity-50"></i> Proyecto
+                                                        </span>
+                                                        <span class="fw-semibold text-dark">{{ solicitud.proyecto_name }}</span>
+                                                    </div>
+
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                                            <i class="bi bi-building-fill opacity-50"></i> Entorno
+                                                        </span>
+                                                        <span class="fw-semibold text-dark">{{ solicitud.entorno_name }}</span>
+                                                    </div>
+
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-secondary small">
+                                                            <i class="bi bi-database-fill-check opacity-50"></i> Acceso BD
+                                                        </span>
+                                                        <span class="fw-semibold text-dark">
+                                                            {% if solicitud.acceso_bd %}Sí{% else %}No{% endif %}
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-secondary small">
+                                                            <i class="bi bi-hdd-network-fill opacity-50"></i> Acceso FTP
+                                                        </span>
+                                                        <span class="fw-semibold text-dark">
+                                                            {% if solicitud.acceso_ftp %}Sí{% else %}No{% endif %}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+
+
+                            <h5 class="fw-bold my-4 mb-3">Agregar información adicional</h5>
+
+                            <form method="POST" enctype="multipart/form-data" action="{{ url_for('finalizar_apertura') }}">
+                            <input type="hidden" name="apertura_code" value="{{ solicitud.apertura_code }}">
+
+                            <!-- Descripción -->
+                            <div class="mb-3">
+                                <label class="form-label fst-italic">Describe lo que se realizo:</label>
+                                <textarea class="form-control" name="descripcion[]" rows="2" placeholder="Ej. Cambios en la base de datos..." required></textarea>
+                            </div>
+
+                            <!-- Imagen -->
+                            <div class="mb-3">
+                                <label class="form-label fst-italic">Imagen:</label>
+                                <input type="file" class="form-control" name="imagen[]" accept="image/*" multiple required>
+                            </div>
+
+                            <div id="preview-imagenes" class="mt-3 d-flex flex-wrap gap-2"></div>
+
+                            {% if solicitud.imagenes %}
+                            <div class="mt-3">
+                                <h6>Imágenes relacionadas:</h6>
+                                <div class="d-flex flex-wrap gap-2">
+                                {% for img in solicitud.imagenes %}
+                                <img src="{{ url_for('uploads', filename=img) }}" alt="Imagen" class="img-thumbnail" style="max-width: 150px;">
+                                {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Botón centrado y moderadamente estilizado -->
+                            <div class="d-flex justify-content-center">
+                                <button type="button" class="finalozarAcceso btn px-4 py-2 rounded-3 shadow-sm btnAbrirModal">
+                                    <i class="bi bi-lock me-2"></i> Finalizar Acceso
+                                </button>
+
+                            </div>
+
+
+                            </form>
+                        </div>
+                        {% else %}
+                            <div class="alert alert-secondary text-center fw-bold mt-3">
+                                <div class="d-flex justify-content-center">
+                                <div class="spinner-grow text-success" role="status"></div>
+                                <div class="spinner-grow text-white" role="status"></div>
+                                </div>
+                                No tienes ninguna apertura activa en este momento.
+                            </div>
+                        {% endif %}
+                    </div>
+            </div>
+
+            {% if solicitudes_restantes %}
+            <hr>
+            <h4 class="mt-4 mb-3 fw-bold opacity-50">Otras aperturas activas</h4>
+            <div class="accordion" id="accordionOtrasSolicitudes">
+                {% for solicitud in solicitudes_restantes %}
+                    <div class="accordion-item actividad-item"
+                        data-user="{{ solicitud.solicitud_usuario|lower }}"
+                        data-proyecto="{{ solicitud.proyecto_name|lower }}"
+                        data-entorno="{{ solicitud.entorno_name|lower }}"
+                        data-folio="{{ solicitud.folio|lower }}"
+                        data-tipo="{{ solicitud.tipo_opcion|lower }}"
+                        data-codigo="{{ solicitud.apertura_code }}"
+                        data-fecha-apertura="{{ solicitud.fecha_apertura.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                        data-tiempo="{{ solicitud.apertura_tiempo }}">
+
+
+                        
+                        <h2 class="accordion-header" id="heading-otras-{{ loop.index }}">
+                            <button class="accordion-button collapsed fw-medium text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-otras-{{ loop.index }}">
+                                <div class="d-flex flex-column w-100">
+                                    <div>
+                                        <h2 class="card-title mb-1 fw-bold">
+                                            Código de Acceso: <span class="fw-bold text-success">#{{ solicitud.apertura_code }}</span> -
+                                            {{ solicitud.tipo_opcion|capitalize }} #{{ solicitud.folio }}
+                                        </h2>
+                                    </div>
+                                    <div class="text-muted small mt-1 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            Fecha de Acceso: <strong>{{ solicitud.fecha_apertura.strftime('%Y-%m-%d %H:%M:%S') }}</strong>
+                                        </div>
+                                        <div>
+                                            Tiempo restante: <span id="contador-{{ solicitud.apertura_code }}" class="fw-bold text-success">--:--:--</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-muted small mt-2">
+                                    <i class="bi bi-pencil-square text-black-50 me-1"></i>
+                                    <strong>Descripción:</strong> {{ solicitud.descripcion }}
+                                </div>
+                                </div>
+                            </button>
+                        </h2>
+                        
+                        <div id="collapse-otras-{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#accordionOtrasSolicitudes">
+                            <div class="accordion-body">
+
+                                <div class="d-flex flex-wrap gap-4 mb-3">
+                                    <div class="d-flex flex-column">
+                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                            <i class="bi bi-person-fill opacity-50"></i> Solicitante
+                                        </span>
+                                        <span class="fw-semibold text-dark">{{ solicitud.solicitud_usuario }}</span>
+                                    </div>
+
+                                    <div class="d-flex flex-column">
+                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                            <i class="bi bi-folder-fill opacity-50"></i> Proyecto
+                                        </span>
+                                        <span class="fw-semibold text-dark">{{ solicitud.proyecto_name }}</span>
+                                    </div>
+
+                                    <div class="d-flex flex-column">
+                                        <span class="text-secondary small d-flex align-items-center gap-1">
+                                            <i class="bi bi-building-fill opacity-50"></i> Entorno
+                                        </span>
+                                        <span class="fw-semibold text-dark">{{ solicitud.entorno_name }}</span>
+                                    </div>
+
+                                    <div class="d-flex flex-column">
+                                        <span class="text-secondary small">
+                                            <i class="bi bi-database-fill-check opacity-50"></i> Acceso BD
+                                        </span>
+                                        <span class="fw-semibold text-dark">
+                                            {% if solicitud.acceso_bd %}Sí{% else %}No{% endif %}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex flex-column">
+                                        <span class="text-secondary small">
+                                            <i class="bi bi-hdd-network-fill opacity-50"></i> Acceso FTP
+                                        </span>
+                                        <span class="fw-semibold text-dark">
+                                            {% if solicitud.acceso_ftp %}Sí{% else %}No{% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- FORMULARIO PARA FINALIZAR APERTURA -->
+                                <h5 class="fw-bold my-4 mb-3">Agregar información adicional</h5>
+
+                                <form method="POST" enctype="multipart/form-data" action="{{ url_for('finalizar_apertura') }}">
+                                    <input type="hidden" name="apertura_code" value="{{ solicitud.apertura_code }}">
+
+                                    <!-- Descripción -->
+                                    <div class="mb-3">
+                                        <label class="form-label fst-italic">Describe lo que se realizó:</label>
+                                        <textarea class="form-control" name="descripcion[]" rows="2" placeholder="Ej. Cambios en la base de datos..." required></textarea>
+                                    </div>
+
+                                    <!-- Imagen -->
+                                    <div class="mb-3">
+                                        <label class="form-label fst-italic">Imagen:</label>
+                                        <input type="file" class="form-control" name="imagen[]" accept="image/*" multiple required>
+                                    </div>
+
+                                    <div id="preview-imagenes-otras-{{ loop.index }}" class="mt-3 d-flex flex-wrap gap-2"></div>
+
+                                    {% if solicitud.imagenes %}
+                                        <div class="mt-3">
+                                            <h6>Imágenes relacionadas:</h6>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                {% for img in solicitud.imagenes %}
+                                                    <img src="{{ url_for('uploads', filename=img) }}" alt="Imagen" class="img-thumbnail" style="max-width: 150px;">
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+
+                                    <div class="d-flex justify-content-center">
+                                        <button type="button" class="boton2 btn px-4 py-2 rounded-3 shadow-sm btnAbrirModal">
+                                            <i class="bi bi-lock me-2"></i> Finalizar Acceso
+                                        </button>
+
+                                    </div>
+                                </form>
+                                <!-- FIN FORMULARIO -->
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+
+
+
+            <!-- Modal de confirmación -->
+                            <div class="modal fade" id="confirmarFinalizacion" tabindex="-1" aria-labelledby="modalFinalizarLabel" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered modal-sm">
+                                    <div class="modal-content border-0 shadow-sm">
+                                        <div class="modal-header bg-light text-dark border-bottom">
+                                        <h5 class="modal-title" id="modalFinalizarLabel">
+                                            <i class="bi bi-exclamation-triangle me-2 text-muted"></i> Confirmar acción
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                        </div>
+                                        <div class="modal-body text-center text-muted small">
+                                        ¿Estás seguro de que deseas cerrar esta conexión?<br>
+                                        <strong class="text-dark d-block mt-2">Esta acción no podrá revertirse.</strong>
+                                        </div>
+                                        <div class="modal-footer justify-content-between">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                                            Cancelar
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" id="btnConfirmarFinalizacion">
+                                            Sí, finalizar
+                                        </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Modal de error -->
+                            <div class="modal fade" id="modalError" tabindex="-1" aria-labelledby="modalErrorLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+                                <div class="modal-dialog modal-dialog-centered modal-sm">
+                                    <div class="modal-content border-0 shadow-sm">
+                                        <div class="modal-header bg-danger text-white border-bottom">
+                                        <h5 class="modal-title" id="modalErrorLabel">
+                                            <i class="bi bi-exclamation-octagon-fill me-2"></i> Error
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                        </div>
+                                        <div class="modal-body text-center small">
+                                        <span id="mensajeError">Por favor completa los campos obligatorios.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <script>
+                                document.addEventListener('DOMContentLoaded', () => {
+                                    const botonesAbrirModal = document.querySelectorAll('.btnAbrirModal');
+                                    const btnConfirmarFinalizacion = document.getElementById('btnConfirmarFinalizacion');
+                                    const modalError = new bootstrap.Modal(document.getElementById('modalError'));
+                                    const modalConfirmacion = new bootstrap.Modal(document.getElementById('confirmarFinalizacion'));
+                                    let formularioActivo = null;
+
+                                    botonesAbrirModal.forEach(boton => {
+                                        boton.addEventListener('click', (e) => {
+                                            e.preventDefault();
+
+                                            const form = boton.closest('form');
+                                            formularioActivo = form;
+
+                                            const descripciones = form.querySelectorAll('textarea[name="descripcion[]"]');
+                                            let descripcionesValidas = true;
+                                            descripciones.forEach(t => {
+                                                if (!t.value.trim()) descripcionesValidas = false;
+                                            });
+
+                                            if (!descripcionesValidas) {
+                                                document.getElementById('mensajeError').textContent = 'Por favor escribe una descripción.';
+                                                modalError.show();
+                                                setTimeout(() => modalError.hide(), 3000);
+                                                return;
+                                            }
+
+                                            modalConfirmacion.show();
+                                        });
+                                    });
+
+                                    btnConfirmarFinalizacion.addEventListener('click', () => {
+                                        if (formularioActivo) {
+                                            formularioActivo.submit();
+                                        }
+                                    });
+                                });
+                            </script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const tarjetas = document.querySelectorAll('[id^="contador-"]');
+
+    tarjetas.forEach(function (elemento) {
+        const aperturaCode = elemento.id.replace("contador-", "");
+        const rawData = document.querySelector(`[data-codigo="${aperturaCode}"]`);
+
+        if (!rawData) return;
+
+        const fechaApertura = rawData.getAttribute("data-fecha-apertura");
+        const tiempoLimite = rawData.getAttribute("data-tiempo");
+
+        if (!fechaApertura || !tiempoLimite || tiempoLimite === "00:00:00") return;
+
+        const [horasDuracion, minutosDuracion, segundosDuracion] = tiempoLimite.split(':').map(Number);
+        const fechaAperturaObj = new Date(fechaApertura);
+        const expiracion = new Date(fechaAperturaObj);
+
+        expiracion.setHours(expiracion.getHours() + horasDuracion);
+        expiracion.setMinutes(expiracion.getMinutes() + minutosDuracion);
+        expiracion.setSeconds(expiracion.getSeconds() + segundosDuracion);
+
+        let yaNotificado = false;
+
+        function actualizarContador() {
+            const ahora = new Date();
+            const diff = expiracion - ahora;
+
+            let texto = "";
+            if (diff <= 0) {
+                texto = "Conexión expirada";
+
+                if (!yaNotificado) {
+                    yaNotificado = true;
+
+                    fetch("/actualizar_tiempo_apertura", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            apertura_code: aperturaCode,
+                            tiempo_restante: "00:00:00"
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => console.log("Notificado:", data))
+                    .catch(error => console.error("Error al notificar:", error));
+                }
+
+            } else {
+                const horas = Math.floor(diff / (1000 * 60 * 60));
+                const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const segundos = Math.floor((diff % (1000 * 60)) / 1000);
+                texto = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+            }
+
+            const el = document.getElementById(`contador-${aperturaCode}`);
+            if (el) el.textContent = texto;
+
+            setTimeout(actualizarContador, 1000);
+        }
+
+        actualizarContador();
+    });
+});
+</script>
+
+
+
+
+
+
+
+
+
+
+<script>
+document.querySelector('input[type="file"][name="imagen[]"]').addEventListener('change', function(e) {
+    const preview = document.getElementById('preview-imagenes');
+    preview.innerHTML = ""; // Limpia previas anteriores
+
+    Array.from(e.target.files).forEach(file => {
+        if (file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.createElement("img");
+                img.src = e.target.result;
+                img.style.maxWidth = "100px";
+                img.style.maxHeight = "100px";
+                img.classList.add("rounded", "border");
+                preview.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+});
+</script>
+
+</body>
+</html>
